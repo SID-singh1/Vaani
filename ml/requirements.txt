@@ -1,0 +1,8 @@
+transformers
+optimum[onnxruntime]
+mlflow
+soundfile
+librosa
+jiwer
+pandas
+psutil

@@ -1,0 +1,40 @@
+# Virtual Environments
+venv/
+env/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database
+*.db
+*.sqlite3
+backend/app.db
+
+# Machine Learning Models and Data
+ml/models/
+ml/data/
+models/
+*.onnx
+*.gguf
+*.bin
+*.pt
+
+# Binaries, Archives, and C++ Builds (llama.cpp)
+*.exe
+*.dll
+*.tar.gz
+*.zip
+*.stackdump
+llama_cpp_src/
+
+# Logs
+*.log
+backend/app.log
+
+# OS
+.DS_Store
+Thumbs.db

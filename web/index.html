@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaani | On-Device Intelligence</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    
+    <div class="app-container">
+        <!-- Sidebar History -->
+        <aside class="sidebar">
+            <div class="brand">
+                <i class="fa-solid fa-microphone-lines brand-icon"></i>
+                <h2>Vaani</h2>
+                <span class="badge">Local AI</span>
+            </div>
+            
+            <div class="history-section">
+                <h3>Recent Transcripts</h3>
+                <ul id="historyList" class="history-list">
+                    <!-- History items injected by JS -->
+                </ul>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="dot pulse"></span>
+                    <span>Systems Online</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-nav">
+                <div class="greeting">
+                    <h1>Transcribe & Summarize</h1>
+                    <p>Powered by quantized Whisper & Phi-3</p>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+                
+                <!-- Upload / Record Zone -->
+                <section class="upload-zone glass-panel" id="dropZone">
+                    <div class="upload-content">
+                        <div class="mic-btn-wrapper">
+                            <button id="recordBtn" class="mic-btn">
+                                <i class="fa-solid fa-microphone"></i>
+                            </button>
+                            <div class="waves"></div>
+                        </div>
+                        <button id="cancelRecordBtn" class="btn secondary-btn hidden" style="margin-bottom: 1rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">
+                            <i class="fa-solid fa-xmark"></i> Cancel Recording
+                        </button>
+                        <h3 id="uploadTitle">Upload or Record Audio</h3>
+                        <p class="subtitle" id="uploadSubtitle">Drop your Hindi/Hinglish audio file here</p>
+                        
+                        <div class="file-input-wrapper" id="fileInputWrapper">
+                            <input type="file" id="fileInput" accept="audio/*" hidden>
+                            <button class="btn primary-btn" onclick="document.getElementById('fileInput').click()">
+                                <i class="fa-solid fa-folder-open"></i> Browse Files
+                            </button>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Loading State -->
+                <section id="loadingState" class="loading-state hidden">
+                    <div class="spinner">
+                        <div class="double-bounce1"></div>
+                        <div class="double-bounce2"></div>
+                    </div>
+                    <h3 id="loadingText">Processing audio on local AI...</h3>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar"></div>
+                    </div>
+                </section>
+
+                <!-- Results Zone -->
+                <section id="resultsZone" class="results-zone hidden">
+                    
+                    <div class="result-header">
+                        <h2>Analysis Results</h2>
+                        <span id="sentimentBadge" class="sentiment-badge">Neutral</span>
+                    </div>
+
+                    <div class="results-grid">
+                        <div class="result-card glass-panel transcript-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-align-left icon-gradient"></i>
+                                <h3>Transcription</h3>
+                            </div>
+                            <div class="card-body">
+                                <p id="transcriptText">Transcript will appear here...</p>
+                            </div>
+                        </div>
+
+                        <div class="result-card glass-panel summary-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-bolt icon-gradient"></i>
+                                <h3>AI Summary</h3>
+                            </div>
+                            <div class="card-body">
+                                <p id="summaryText">Summary will appear here...</p>
+                            </div>
+                        </div>
+
+                        <div class="result-card glass-panel action-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-check-double icon-gradient"></i>
+                                <h3>Action Items</h3>
+                            </div>
+                            <div class="card-body">
+                                <ul id="actionItemsList" class="action-items-list">
+                                    <!-- Items injected by JS -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="actions-row">
+                        <button class="btn secondary-btn" id="newUploadBtn">
+                            <i class="fa-solid fa-rotate-left"></i> Analyze Another
+                        </button>
+                    </div>
+
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
