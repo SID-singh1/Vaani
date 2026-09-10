@@ -65,6 +65,19 @@ async def summarize_transcript(transcript: str) -> dict:
     
     prompt = f"<|system|>\n{system_prompt}<|end|>\n<|user|>\n{user_prompt}<|end|>\n<|assistant|>"
     
+    schema = {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "action_items": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "sentiment": {"type": "string", "enum": ["Positive", "Neutral", "Negative"]}
+        },
+        "required": ["summary", "action_items", "sentiment"]
+    }
+    
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
             response = await client.post(
@@ -73,7 +86,8 @@ async def summarize_transcript(transcript: str) -> dict:
                     "prompt": prompt,
                     "n_predict": 256,
                     "temperature": 0.1,
-                    "stop": ["<|end|>"]
+                    "stop": ["<|end|>"],
+                    "json_schema": schema
                 }
             )
             response.raise_for_status()

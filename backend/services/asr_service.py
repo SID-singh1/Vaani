@@ -49,7 +49,7 @@ async def transcribe_audio(file_path: str) -> str:
         os.remove(wav_path)
     
     # Use pipeline which automatically handles long audio (chunk_length_s=30)
-    # We force language='hi' to prevent hallucinations on noisy/silent segments.
-    result = asr_pipeline(speech, generate_kwargs={"language": "hi"})
+    # We command Whisper to translate to English, bypassing the LLM's inability to read Devanagari.
+    result = asr_pipeline(speech, generate_kwargs={"task": "translate"})
     
     return result["text"]
