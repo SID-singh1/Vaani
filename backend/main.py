@@ -43,8 +43,10 @@ from fastapi.responses import FileResponse
 import os
 
 # Include routers
+from routers import audio, history, admin
 app.include_router(audio.router, tags=["Audio Processing"])
 app.include_router(history.router, tags=["History"])
+app.include_router(admin.router, prefix="/admin", tags=["Admin Analytics"])
 
 # Mount static web files
 WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
@@ -58,3 +60,11 @@ def read_root():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": f"Welcome to {config.PROJECT_NAME} API"}
+
+@app.get("/admin")
+def read_admin():
+    # Serve admin.html
+    admin_path = os.path.join(WEB_DIR, "admin.html")
+    if os.path.exists(admin_path):
+        return FileResponse(admin_path)
+    return {"message": "Admin dashboard not found"}

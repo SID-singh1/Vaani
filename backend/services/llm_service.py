@@ -4,12 +4,17 @@ import atexit
 import httpx
 import json
 import time
+import platform
 from fastapi import HTTPException
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 ML_DIR = os.path.join(BASE_DIR, "ml")
-LLAMA_SERVER_EXE = os.path.join(ML_DIR, "llama-server.exe")
+
+# Determine binary name based on OS (for Docker/Linux compatibility)
+EXE_NAME = "llama-server.exe" if platform.system() == "Windows" else "llama-server"
+LLAMA_SERVER_EXE = os.path.join(ML_DIR, EXE_NAME)
+
 LLM_MODEL = os.path.join(MODELS_DIR, "phi-3-mini-q4_k_m.gguf")
 
 llama_process = None

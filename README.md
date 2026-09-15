@@ -1,6 +1,6 @@
 # Vaani | On-Device Hindi-Hinglish Voice Intelligence
 
-![Vaani Dashboard](.github/assets/dashboard.png) *(UI Screenshot placeholder)*
+![Vaani Dashboard](.github/assets/dashboard.png)
 
 ## Problem Statement
 

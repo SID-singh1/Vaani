@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.env
+vaani.db
+ml/data/temp/*
+test.zip
+llama_cpp.tar.gz
+bash.exe.stackdump
+app.log

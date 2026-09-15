@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaani Admin Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a8c0ff 0%, #3f2b96 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 20px;
+            height: 300px;
+        }
+    </style>
+</head>
+<body style="display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px;">
+    <div class="glass-panel" style="width: 100%; max-width: 1200px; padding: 40px; margin: 0 auto;">
+        <header style="text-align: center; margin-bottom: 40px;">
+            <h1 style="font-size: 2.5rem; background: linear-gradient(135deg, #fff, #a5b4fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Vaani Admin Analytics</h1>
+            <p style="color: var(--text-secondary); font-size: 1.1rem;">Live metrics from your on-device pipeline.</p>
+        </header>
+
+        <div class="admin-grid">
+            <div class="stat-card">
+                <h3 style="color: var(--text-secondary); font-size: 1rem; text-transform: uppercase; letter-spacing: 1px;">Total Users</h3>
+                <div id="totalUsers" class="stat-value">...</div>
+            </div>
+            <div class="stat-card">
+                <h3 style="color: var(--text-secondary); font-size: 1rem; text-transform: uppercase; letter-spacing: 1px;">Voice Notes Processed</h3>
+                <div id="totalInteractions" class="stat-value">...</div>
+            </div>
+        </div>
+
+        <div class="admin-grid">
+            <div class="chart-container" style="flex: 2; min-width: 0;">
+                <canvas id="timelineChart"></canvas>
+            </div>
+            <div class="chart-container" style="flex: 1; min-width: 0;">
+                <canvas id="sentimentChart"></canvas>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 40px;">
+            <button class="btn secondary-btn" onclick="window.location.href='/'">Back to App</button>
+        </div>
+    </div>
+
+    <script src="/static/admin.js"></script>
+</body>
+</html>
