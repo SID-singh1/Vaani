@@ -5,11 +5,18 @@ import httpx
 import json
 import time
 import platform
+import google.generativeai as genai
 from fastapi import HTTPException
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 ML_DIR = os.path.join(BASE_DIR, "ml")
+
+USE_LOCAL_MODELS = os.getenv("USE_LOCAL_MODELS", "true").lower() == "true"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Determine binary name based on OS (for Docker/Linux compatibility)
 EXE_NAME = "llama-server.exe" if platform.system() == "Windows" else "llama-server"
@@ -21,6 +28,9 @@ llama_process = None
 LLAMA_SERVER_PORT = 8081
 
 def start_llama_server():
+    if not USE_LOCAL_MODELS:
+        return
+        
     global llama_process
     if llama_process is not None and llama_process.poll() is None:
         return
@@ -59,16 +69,61 @@ atexit.register(stop_llama_server)
 
 async def summarize_transcript(transcript: str) -> dict:
     """
-    Summarizes the given transcript using the INT4 Phi-3 model via llama-server.exe.
-    Returns a dict with 'summary', 'action_items', and 'sentiment'.
+    Summarizes the given transcript.
+    If USE_LOCAL_MODELS is true, uses INT4 Phi-3 model locally.
+    If false, dynamically switches to Gemini Pro API.
     """
-    start_llama_server()
+    system_prompt = "You are an intelligent business assistant that analyzes Hindi-English mixed transcriptions. Extract a concise summary (1-2 sentences), a list of action items, and the overall sentiment (Positive, Neutral, or Negative)."
     
-    system_prompt = "You are an intelligent business assistant that analyzes Hindi-English mixed transcriptions. Extract a concise summary (1-2 sentences), a list of action items, and the overall sentiment (Positive, Neutral, or Negative). Return your response strictly as a JSON object with keys: 'summary', 'action_items', 'sentiment'. Do not output any other text."
+    if not USE_LOCAL_MODELS:
+        if not GEMINI_API_KEY:
+            raise Exception("GEMINI_API_KEY is required when USE_LOCAL_MODELS is false.")
+            
+        print("Summarizing via Gemini API...")
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        # We use flash for extreme speed, but it's very smart at JSON extraction
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            system_instruction=system_prompt,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.1
+            )
+        )
+        
+        # We force the JSON schema by including it in the prompt, since the SDK might not 
+        # expose responseSchema dynamically yet depending on version.
+        user_prompt = f"Transcript: {transcript}\n\nRespond with a JSON object containing keys: 'summary' (string), 'action_items' (array of strings), and 'sentiment' (Positive/Neutral/Negative)."
+        
+        try:
+            response = await model.generate_content_async(user_prompt)
+            text = response.text.strip()
+            
+            # Clean markdown code blocks if gemini returned them despite JSON mode
+            if text.startswith("```json"): text = text[7:]
+            elif text.startswith("```"): text = text[3:]
+            if text.endswith("```"): text = text[:-3]
+            
+            result = json.loads(text.strip())
+            action_items = result.get("action_items", [])
+            if not isinstance(action_items, list):
+                action_items = [action_items]
+                
+            return {
+                "summary": result.get("summary", ""),
+                "action_items": action_items,
+                "sentiment": result.get("sentiment", "Neutral")
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Gemini LLM summarization failed: {str(e)}")
+
+    # --- LOCAL LLM EXECUTION ---
+    start_llama_server()
     
     user_prompt = f"Transcript: {transcript}"
     
-    prompt = f"<|system|>\n{system_prompt}<|end|>\n<|user|>\n{user_prompt}<|end|>\n<|assistant|>"
+    prompt = f"<|system|>\n{system_prompt} Return your response strictly as a JSON object with keys: 'summary', 'action_items', 'sentiment'. Do not output any other text.<|end|>\n<|user|>\n{user_prompt}<|end|>\n<|assistant|>"
     
     schema = {
         "type": "object",
@@ -129,4 +184,4 @@ async def summarize_transcript(transcript: str) -> dict:
                     "sentiment": "Unknown"
                 }
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"LLM summarization failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Local LLM summarization failed: {str(e)}")

@@ -68,8 +68,13 @@ function App() {
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 1, type: "spring", bounce: 0.4 }}
           >
-            <span className="glitch" data-text="Voice AI">Voice AI</span> <br/> 
-            <span className="text-stroke">Reimagined.</span>
+            <motion.div
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+            >
+              <span className="glitch" data-text="Voice AI">Voice AI</span> <br/> 
+              <span className="text-stroke">Reimagined.</span>
+            </motion.div>
           </motion.h1>
           
           <motion.p 
@@ -104,7 +109,7 @@ function App() {
           {/* Marquee */}
           <div className="marquee-container">
             <motion.div className="marquee-text" variants={marqueeVariants} animate="animate">
-              NO CLOUD • NO HARVESTING • NO DELAYS • CPU OPTIMIZED • NO CLOUD • NO HARVESTING • NO DELAYS • 
+              INSTANT HINGLISH RECOGNITION • INTELLIGENT SUMMARIES • SEAMLESS TELEGRAM INTEGRATION • INSTANT HINGLISH RECOGNITION • INTELLIGENT SUMMARIES • SEAMLESS TELEGRAM INTEGRATION • 
             </motion.div>
           </div>
 
@@ -114,13 +119,13 @@ function App() {
               className="feature-row"
               initial={{ opacity: 0, x: -100, rotateY: 45, scale: 0.8 }}
               whileInView={{ opacity: 1, x: 0, rotateY: 0, scale: 1 }}
-              viewport={{ once: true, margin: "-20%" }}
+              viewport={{ once: false, margin: "-20%" }}
               transition={{ duration: 1, type: "spring", bounce: 0.5 }}
             >
               <div className="feature-content">
                 <div className="feature-number">01</div>
-                <h2 className="feature-title">Absolute <br/> Privacy</h2>
-                <p className="feature-desc">By running highly optimized 4-bit quantized models directly on bare metal, your voice data never touches a third-party server.</p>
+                <h2 className="feature-title">Blazing <br/> Fast API</h2>
+                <p className="feature-desc">Powered by Groq's LPU hardware for instant Whisper transcription and Gemini Pro for deeply intelligent context extraction.</p>
               </div>
               <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                 <ShieldAlert className="visual-icon pink" />
@@ -132,7 +137,7 @@ function App() {
               className="feature-row reverse"
               initial={{ opacity: 0, x: 100, rotateX: 45, scale: 0.8 }}
               whileInView={{ opacity: 1, x: 0, rotateX: 0, scale: 1 }}
-              viewport={{ once: true, margin: "-20%" }}
+              viewport={{ once: false, margin: "-20%" }}
               transition={{ duration: 1, type: "spring", bounce: 0.5 }}
             >
               <div className="feature-content">
@@ -150,13 +155,13 @@ function App() {
               className="feature-row"
               initial={{ opacity: 0, y: 150, rotateZ: -10, scale: 0.8 }}
               whileInView={{ opacity: 1, y: 0, rotateZ: 0, scale: 1 }}
-              viewport={{ once: true, margin: "-20%" }}
+              viewport={{ once: false, margin: "-20%" }}
               transition={{ duration: 1, type: "spring", bounce: 0.5 }}
             >
               <div className="feature-content">
                 <div className="feature-number">03</div>
-                <h2 className="feature-title">Lightning <br/> Fast</h2>
-                <p className="feature-desc">Bypassing Python bindings to directly reverse-proxy the native C++ engine allows us to achieve impossible CPU speeds.</p>
+                <h2 className="feature-title">Dual Engine <br/> Architecture</h2>
+                <p className="feature-desc">Supports running 100% locally with 4-bit LLaMA models for complete privacy, or dynamically switching to cloud APIs for scale.</p>
               </div>
               <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                 <Zap className="visual-icon" />

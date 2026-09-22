@@ -3,9 +3,15 @@ import subprocess
 import librosa
 from transformers import AutoProcessor, pipeline
 from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
+import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "whisper-small-int8")
+USE_LOCAL_MODELS = os.getenv("USE_LOCAL_MODELS", "true").lower() == "true"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 model = None
 processor = None
@@ -30,8 +36,27 @@ def load_asr_model():
 
 async def transcribe_audio(file_path: str) -> str:
     """
-    Transcribes the given audio file using the INT8 quantized Whisper ONNX model.
+    Transcribes the given audio file.
+    If USE_LOCAL_MODELS is true, uses INT8 quantized Whisper ONNX model locally.
+    If false, dynamically switches to Groq's blazing fast whisper-large-v3 API.
     """
+    if not USE_LOCAL_MODELS:
+        if not GROQ_API_KEY:
+            raise Exception("GROQ_API_KEY is required when USE_LOCAL_MODELS is false.")
+        
+        print("Transcribing via Groq Whisper API...")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            with open(file_path, "rb") as f:
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/audio/translations",
+                    headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                    data={"model": "whisper-large-v3"},
+                    files={"file": (os.path.basename(file_path), f, "audio/mpeg")}
+                )
+            response.raise_for_status()
+            return response.json().get("text", "")
+
+    # Local Fallback Execution
     load_asr_model()
     
     # Force convert to 16kHz WAV using ffmpeg to guarantee compatibility (webm, ogg, etc)

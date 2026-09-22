@@ -297,14 +297,14 @@ footer {
 
 @keyframes glitch-anim-1 {
     0%, 10% { clip-path: polygon(0 15%, 100% 15%, 100% 30%, 0 30%); transform: translate(0); }
-    11% { clip-path: polygon(0 50%, 100% 50%, 100% 70%, 0 70%); transform: translate(-4px, -2px); }
-    12% { transform: translate(4px, 2px); }
+    11% { clip-path: polygon(0 50%, 100% 50%, 100% 70%, 0 70%); transform: translate(-8px, -4px); }
+    12% { transform: translate(8px, 4px); }
     13%, 100% { clip-path: polygon(0 0, 0 0, 0 0, 0 0); transform: translate(0); }
 }
 
 @keyframes glitch-anim-2 {
     0%, 10% { clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%); transform: translate(0); }
-    11% { clip-path: polygon(0 10%, 100% 10%, 100% 40%, 0 40%); transform: translate(4px, 2px); }
-    12% { transform: translate(-4px, -2px); }
+    11% { clip-path: polygon(0 10%, 100% 10%, 100% 40%, 0 40%); transform: translate(8px, 4px); }
+    12% { transform: translate(-8px, -4px); }
     13%, 100% { clip-path: polygon(0 0, 0 0, 0 0, 0 0); transform: translate(0); }
 }
