@@ -82,9 +82,9 @@ async def summarize_transcript(transcript: str) -> dict:
         print("Summarizing via Gemini API...")
         genai.configure(api_key=GEMINI_API_KEY)
         
-        # We use flash for extreme speed, but it's very smart at JSON extraction
+        # We use the powerful Gemini 1.5 Pro model for maximum intelligence and nuance
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name='gemini-1.5-pro',
             system_instruction=system_prompt,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
