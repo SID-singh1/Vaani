@@ -4,3 +4,7 @@ python-multipart
 slowapi
 sqlalchemy
 pydantic
+
+httpx
+google-generativeai
+python-dotenv
