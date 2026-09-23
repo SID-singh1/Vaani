@@ -1,8 +1,5 @@
 import os
 import subprocess
-import librosa
-from transformers import AutoProcessor, pipeline
-from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 import httpx
 from dotenv import load_dotenv
 
@@ -20,6 +17,9 @@ asr_pipeline = None
 def load_asr_model():
     global model, processor, asr_pipeline
     if model is None or processor is None or asr_pipeline is None:
+        from transformers import AutoProcessor, pipeline
+        from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
+        
         print("Loading Whisper INT8 ONNX model...")
         processor = AutoProcessor.from_pretrained(MODEL_PATH)
         model = ORTModelForSpeechSeq2Seq.from_pretrained(MODEL_PATH)
@@ -57,6 +57,7 @@ async def transcribe_audio(file_path: str) -> str:
             return response.json().get("text", "")
 
     # Local Fallback Execution
+    import librosa
     load_asr_model()
     
     # Force convert to 16kHz WAV using ffmpeg to guarantee compatibility (webm, ogg, etc)
