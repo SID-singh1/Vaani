@@ -41,32 +41,57 @@ async def process_audio(
         # Run ML Pipeline
         transcript = await transcribe_audio(temp_path)
         llm_result = await summarize_transcript(transcript)
+        
+        # Save Interaction
+        interaction = Interaction(
+            user_id=user_id,
+            transcript=transcript,
+            summary=llm_result["summary"],
+            action_items=json.dumps(llm_result["action_items"]),
+            sentiment=llm_result["sentiment"]
+        )
+        db.add(interaction)
+        db.commit()
+        db.refresh(interaction)
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
+        # Log failure to database
+        failed_interaction = Interaction(
+            user_id=user_id,
+            error_message=str(e),
+            sentiment="Error"
+        )
+        db.add(failed_interaction)
+        db.commit()
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
     finally:
         # Cleanup temporary audio file
         if os.path.exists(temp_path):
             os.remove(temp_path)
-    
-    # Save Interaction
-    interaction = Interaction(
-        user_id=user_id,
-        transcript=transcript,
-        summary=llm_result["summary"],
-        action_items=json.dumps(llm_result["action_items"]),
-        sentiment=llm_result["sentiment"]
-    )
-    db.add(interaction)
-    db.commit()
 
     # Return response
     return ProcessAudioResponse(
+        interaction_id=interaction.id,
         transcript=transcript,
         summary=llm_result["summary"],
         action_items=llm_result["action_items"],
         sentiment=llm_result["sentiment"],
         usage=UsageStatus(tier=user.tier, requests_remaining_today=None) # We can calculate remaining later
     )
+
+@router.post("/feedback")
+def submit_feedback(
+    interaction_id: str = Form(...),
+    rating: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    interaction = db.query(Interaction).filter(Interaction.id == interaction_id).first()
+    if not interaction:
+        raise HTTPException(status_code=404, detail="Interaction not found")
+    
+    interaction.accuracy_rating = rating
+    db.commit()
+    return {"status": "success"}
 

@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.get("/history/{user_id}", response_model=HistoryResponse)
 def get_history(user_id: str, db: Session = Depends(get_db)):
-    interactions = db.query(Interaction).filter(Interaction.user_id == user_id).order_by(Interaction.timestamp.desc()).all()
+    interactions = db.query(Interaction).filter(Interaction.user_id == user_id).order_by(Interaction.timestamp.desc()).limit(5).all()
     
     history_items = []
     for interaction in interactions:

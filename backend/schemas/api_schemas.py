@@ -7,6 +7,7 @@ class UsageStatus(BaseModel):
     requests_remaining_today: Optional[int] = None
 
 class ProcessAudioResponse(BaseModel):
+    interaction_id: str
     transcript: str
     summary: str
     action_items: List[str]

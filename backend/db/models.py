@@ -24,5 +24,7 @@ class Interaction(Base):
     summary = Column(Text, nullable=True)
     action_items = Column(Text, nullable=True) # JSON serialized string
     sentiment = Column(String, nullable=True)
+    accuracy_rating = Column(String, nullable=True) # e.g. "thumbs_up", "thumbs_down"
+    error_message = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="interactions")

@@ -8,3 +8,5 @@ pydantic
 httpx
 google-generativeai
 python-dotenv
+
+psycopg2-binary

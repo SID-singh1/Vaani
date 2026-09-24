@@ -51,7 +51,7 @@ async def transcribe_audio(file_path: str) -> str:
                     "https://api.groq.com/openai/v1/audio/translations",
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                     data={"model": "whisper-large-v3"},
-                    files={"file": (os.path.basename(file_path), f, "audio/mpeg")}
+                    files={"file": ("voice.ogg", f, "audio/ogg")}
                 )
             response.raise_for_status()
             return response.json().get("text", "")
