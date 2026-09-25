@@ -84,7 +84,7 @@ async def summarize_transcript(transcript: str) -> dict:
         
         # We use the powerful Gemini 1.5 Pro model for maximum intelligence and nuance
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-pro',
+            model_name='gemini-1.5-pro-latest',
             system_instruction=system_prompt,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
