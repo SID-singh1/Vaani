@@ -68,8 +68,9 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def process_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Download the voice message and send it to the FastAPI backend."""
-    # Let the user know we are working on it
-    status_message = await update.message.reply_text("⏳ Processing your voice note... (this may take 30-60 seconds on CPU)")
+    duration = getattr(update.message.voice, 'duration', 0)
+    duration_str = f"{duration}s " if duration else ""
+    status_message = await update.message.reply_text(f"⚡ Transcribing & analyzing your {duration_str}voice note... ✨")
     
     try:
         # Get the voice file from Telegram
