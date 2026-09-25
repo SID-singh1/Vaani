@@ -35,6 +35,6 @@ llama_cpp_src/
 *.log
 backend/app.log
 
-# OS
-.DS_Store
-Thumbs.db
+# Local Reference & Planning Notes
+futurework.md
+future_work.md
