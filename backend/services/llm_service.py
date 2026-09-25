@@ -5,7 +5,10 @@ import httpx
 import json
 import time
 import platform
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 from fastapi import HTTPException
 from dotenv import load_dotenv
 
@@ -79,44 +82,82 @@ async def summarize_transcript(transcript: str) -> dict:
         if not GEMINI_API_KEY:
             raise Exception("GEMINI_API_KEY is required when USE_LOCAL_MODELS is false.")
             
-        print("Summarizing via Gemini API...")
-        genai.configure(api_key=GEMINI_API_KEY)
-        
-        # We use the powerful Gemini 1.5 Pro model for maximum intelligence and nuance
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-pro-latest',
-            system_instruction=system_prompt,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                temperature=0.1
-            )
-        )
-        
-        # We force the JSON schema by including it in the prompt, since the SDK might not 
-        # expose responseSchema dynamically yet depending on version.
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         user_prompt = f"Transcript: {transcript}\n\nRespond with a JSON object containing keys: 'summary' (string), 'action_items' (array of strings), and 'sentiment' (Positive/Neutral/Negative)."
         
+        # Primary method: Direct async HTTPX REST call (bypasses gRPC quirks & SDK version deprecations)
         try:
-            response = await model.generate_content_async(user_prompt)
-            text = response.text.strip()
-            
-            # Clean markdown code blocks if gemini returned them despite JSON mode
-            if text.startswith("```json"): text = text[7:]
-            elif text.startswith("```"): text = text[3:]
-            if text.endswith("```"): text = text[:-3]
-            
-            result = json.loads(text.strip())
-            action_items = result.get("action_items", [])
-            if not isinstance(action_items, list):
-                action_items = [action_items]
-                
-            return {
-                "summary": result.get("summary", ""),
-                "action_items": action_items,
-                "sentiment": result.get("sentiment", "Neutral")
+            print(f"Summarizing via Gemini API ({model_name})...")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+            payload = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": [{"parts": [{"text": user_prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "temperature": 0.1
+                }
             }
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Gemini LLM summarization failed: {str(e)}")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                        if text.startswith("```json"): text = text[7:]
+                        elif text.startswith("```"): text = text[3:]
+                        if text.endswith("```"): text = text[:-3]
+                        
+                        result = json.loads(text.strip())
+                        action_items = result.get("action_items", [])
+                        if not isinstance(action_items, list):
+                            action_items = [action_items]
+                            
+                        return {
+                            "summary": result.get("summary", ""),
+                            "action_items": action_items,
+                            "sentiment": result.get("sentiment", "Neutral")
+                        }
+                    else:
+                        print(f"Gemini API returned no candidates: {data}")
+                else:
+                    print(f"Gemini REST returned HTTP {response.status_code}: {response.text}")
+        except Exception as rest_err:
+            print(f"Gemini REST call failed ({rest_err}), trying Google GenerativeAI SDK fallback...")
+
+        # Fallback method: Google GenerativeAI SDK
+        if genai is not None:
+            try:
+                genai.configure(api_key=GEMINI_API_KEY)
+                sdk_model = genai.GenerativeModel(
+                    model_name=model_name,
+                    system_instruction=system_prompt,
+                    generation_config=genai.GenerationConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+                response = await sdk_model.generate_content_async(user_prompt)
+                text = response.text.strip()
+                
+                if text.startswith("```json"): text = text[7:]
+                elif text.startswith("```"): text = text[3:]
+                if text.endswith("```"): text = text[:-3]
+                
+                result = json.loads(text.strip())
+                action_items = result.get("action_items", [])
+                if not isinstance(action_items, list):
+                    action_items = [action_items]
+                    
+                return {
+                    "summary": result.get("summary", ""),
+                    "action_items": action_items,
+                    "sentiment": result.get("sentiment", "Neutral")
+                }
+            except Exception as sdk_err:
+                raise HTTPException(status_code=500, detail=f"Gemini LLM summarization failed: {str(sdk_err)}")
+        else:
+            raise HTTPException(status_code=500, detail="Gemini LLM summarization failed: direct REST call failed and google-generativeai SDK is not available.")
 
     # --- LOCAL LLM EXECUTION ---
     start_llama_server()
