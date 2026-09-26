@@ -53,6 +53,10 @@ WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
 os.makedirs(WEB_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "Vaani"}
+
 @app.get("/")
 def read_root():
     # Serve index.html by default
