@@ -45,8 +45,9 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Fetching your history...")
     
     try:
+        headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(f"{config.FASTAPI_BACKEND_URL}/history/{user_id}")
+            response = await client.get(f"{config.FASTAPI_BACKEND_URL}/history/{user_id}", headers=headers)
             response.raise_for_status()
             data = response.json()
             
@@ -82,6 +83,7 @@ async def process_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         
         # Send to our FastAPI backend
         user_id = f"tg_{update.effective_user.id}"
+        headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
         
         async with httpx.AsyncClient(timeout=120.0) as client:
             files = {'audio': ('voice.oga', audio_buffer.getvalue(), 'audio/ogg')}
@@ -90,7 +92,8 @@ async def process_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
             response = await client.post(
                 f"{config.FASTAPI_BACKEND_URL}/process-audio",
                 data=data,
-                files=files
+                files=files,
+                headers=headers
             )
             response.raise_for_status()
             
@@ -141,10 +144,12 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         interaction_id = "_".join(parts[3:])
         
         try:
+            headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(
                     f"{config.FASTAPI_BACKEND_URL}/feedback",
-                    data={"interaction_id": interaction_id, "rating": rating}
+                    data={"interaction_id": interaction_id, "rating": rating},
+                    headers=headers
                 )
             # Update the message to remove the buttons and thank the user
             original_text = query.message.text

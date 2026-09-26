@@ -1,14 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from db.database import get_db
 from db.models import User, Interaction
+from core.config import config
 
 router = APIRouter()
 
 @router.get("/analytics")
-def get_analytics(db: Session = Depends(get_db)):
+def get_analytics(request: Request, db: Session = Depends(get_db)):
+    if config.ADMIN_SECRET_KEY:
+        auth_header = request.headers.get("x-admin-key", "")
+        auth_query = request.query_params.get("key", "")
+        if auth_header != config.ADMIN_SECRET_KEY and auth_query != config.ADMIN_SECRET_KEY:
+            raise HTTPException(status_code=401, detail="Unauthorized: Invalid Admin Key")
     try:
         # Total users
         total_users = db.query(User).count()

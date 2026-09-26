@@ -16,6 +16,8 @@ router = APIRouter()
 TEMP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ml", "data", "temp"))
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+MAX_AUDIO_SIZE = 15 * 1024 * 1024  # 15 MB limit
+
 @router.post("/process-audio", response_model=ProcessAudioResponse)
 @limiter.limit(config.RATE_LIMIT_DEFAULT)
 async def process_audio(
@@ -31,11 +33,19 @@ async def process_audio(
         db.add(user)
         db.commit()
 
-    # Save audio temporarily
-    temp_path = os.path.join(TEMP_DIR, f"{uuid.uuid4()}_{audio.filename}")
+    # Sanitize extension and generate safe UUID filename (prevents directory traversal)
+    original_ext = os.path.splitext(audio.filename or "")[1].lower()
+    allowed_exts = [".ogg", ".oga", ".wav", ".mp3", ".webm", ".m4a", ".aac"]
+    safe_ext = original_ext if original_ext in allowed_exts else ".oga"
+    safe_filename = f"{uuid.uuid4()}{safe_ext}"
+    temp_path = os.path.join(TEMP_DIR, safe_filename)
+
     try:
+        content = await audio.read()
+        if len(content) > MAX_AUDIO_SIZE:
+            raise HTTPException(status_code=413, detail="Audio file too large. Maximum allowed size is 15MB.")
+
         with open(temp_path, "wb") as f:
-            content = await audio.read()
             f.write(content)
             
         # Run ML Pipeline

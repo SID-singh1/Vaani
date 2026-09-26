@@ -1,6 +1,19 @@
 document.addEventListener('DOMContentLoaded', async () => {
     try {
-        const response = await fetch('/admin/analytics');
+        let adminKey = localStorage.getItem('vaani_admin_key') || '';
+        let headers = adminKey ? { 'x-admin-key': adminKey } : {};
+        let response = await fetch('/admin/analytics', { headers });
+
+        if (response.status === 401) {
+            const enteredKey = prompt("🔐 Admin Dashboard is protected. Please enter the Admin Secret Key:");
+            if (enteredKey) {
+                localStorage.setItem('vaani_admin_key', enteredKey);
+                response = await fetch('/admin/analytics', { headers: { 'x-admin-key': enteredKey } });
+            }
+        }
+        if (!response.ok) {
+            throw new Error(`Access denied or server error (HTTP ${response.status})`);
+        }
         const data = await response.json();
 
         // Update basic stats
