@@ -35,7 +35,7 @@ async def process_audio(
 
     # Sanitize extension and generate safe UUID filename (prevents directory traversal)
     original_ext = os.path.splitext(audio.filename or "")[1].lower()
-    allowed_exts = [".ogg", ".oga", ".wav", ".mp3", ".webm", ".m4a", ".aac"]
+    allowed_exts = [".ogg", ".oga", ".wav", ".mp3", ".webm", ".m4a", ".aac", ".mp4", ".flac", ".mov"]
     safe_ext = original_ext if original_ext in allowed_exts else ".oga"
     safe_filename = f"{uuid.uuid4()}{safe_ext}"
     temp_path = os.path.join(TEMP_DIR, safe_filename)
@@ -90,6 +90,44 @@ async def process_audio(
         sentiment=llm_result["sentiment"],
         usage=UsageStatus(tier=user.tier, requests_remaining_today=None) # We can calculate remaining later
     )
+
+@router.post("/process-text", response_model=ProcessAudioResponse)
+@limiter.limit(config.RATE_LIMIT_DEFAULT)
+async def process_text(
+    request: Request,
+    user_id: str = Form(...),
+    text: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        user = User(id=user_id)
+        db.add(user)
+        db.commit()
+
+    try:
+        llm_result = await summarize_transcript(text)
+        interaction = Interaction(
+            user_id=user_id,
+            transcript=text,
+            summary=llm_result["summary"],
+            action_items=json.dumps(llm_result["action_items"]),
+            sentiment=llm_result["sentiment"]
+        )
+        db.add(interaction)
+        db.commit()
+        db.refresh(interaction)
+
+        return ProcessAudioResponse(
+            interaction_id=interaction.id,
+            transcript=text,
+            summary=llm_result["summary"],
+            action_items=llm_result["action_items"],
+            sentiment=llm_result["sentiment"],
+            usage=UsageStatus(tier=user.tier, requests_remaining_today=None)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Text summarization failed: {str(e)}")
 
 @router.post("/feedback")
 def submit_feedback(

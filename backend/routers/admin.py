@@ -9,18 +9,26 @@ from core.config import config
 router = APIRouter()
 
 @router.get("/analytics")
-def get_analytics(request: Request, db: Session = Depends(get_db)):
+def get_analytics(request: Request, days: int = 7, db: Session = Depends(get_db)):
     if config.ADMIN_SECRET_KEY:
         auth_header = request.headers.get("x-admin-key", "")
         auth_query = request.query_params.get("key", "")
         if auth_header != config.ADMIN_SECRET_KEY and auth_query != config.ADMIN_SECRET_KEY:
             raise HTTPException(status_code=401, detail="Unauthorized: Invalid Admin Key")
     try:
-        # Total users
+        # Total users and interactions
         total_users = db.query(User).count()
-
-        # Total voice notes processed
         total_interactions = db.query(Interaction).count()
+
+        # Today's interactions (UTC)
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_interactions = db.query(Interaction).filter(Interaction.timestamp >= today_start).count()
+
+        # Feedback & Accuracy metrics
+        thumbs_up = db.query(Interaction).filter(Interaction.accuracy_rating == "thumbs_up").count()
+        thumbs_down = db.query(Interaction).filter(Interaction.accuracy_rating == "thumbs_down").count()
+        total_feedback = thumbs_up + thumbs_down
+        accuracy_percentage = round((thumbs_up / total_feedback) * 100, 1) if total_feedback > 0 else None
 
         # Sentiment Breakdown
         sentiment_counts = db.query(Interaction.sentiment, func.count(Interaction.id)).group_by(Interaction.sentiment).all()
@@ -31,25 +39,54 @@ def get_analytics(request: Request, db: Session = Depends(get_db)):
             "Unknown": 0
         }
         for sentiment, count in sentiment_counts:
-            if sentiment:
+            if sentiment in sentiment_data:
                 sentiment_data[sentiment] = count
+            elif sentiment:
+                sentiment_data["Unknown"] += count
 
-        # Interactions over the last 7 days
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        recent_interactions = db.query(
+        # Interactions timeline over the selected date range
+        cutoff_date = datetime.utcnow() - timedelta(days=days) if days > 0 else datetime.min
+        recent_interactions_query = db.query(
             func.date(Interaction.timestamp).label("date"), 
             func.count(Interaction.id).label("count")
-        ).filter(Interaction.timestamp >= seven_days_ago) \
-         .group_by(func.date(Interaction.timestamp)) \
-         .order_by(func.date(Interaction.timestamp)).all()
+        )
+        if days > 0:
+            recent_interactions_query = recent_interactions_query.filter(Interaction.timestamp >= cutoff_date)
+            
+        recent_interactions = recent_interactions_query.group_by(func.date(Interaction.timestamp)) \
+                                                      .order_by(func.date(Interaction.timestamp)).all()
 
         timeline = {str(item.date): item.count for item in recent_interactions}
+
+        # 10 Most recent interactions for live activity feed
+        recent_records = db.query(Interaction).order_by(Interaction.timestamp.desc()).limit(10).all()
+        recent_list = []
+        for r in recent_records:
+            user_display = r.user_id
+            if user_display and len(user_display) > 10:
+                user_display = user_display[:6] + "..." + user_display[-4:]
+            recent_list.append({
+                "id": r.id,
+                "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M") if r.timestamp else "",
+                "user_id": user_display,
+                "summary": r.summary or "No summary generated",
+                "sentiment": r.sentiment or "Neutral",
+                "accuracy_rating": r.accuracy_rating or "unrated"
+            })
 
         return {
             "total_users": total_users,
             "total_interactions": total_interactions,
+            "today_interactions": today_interactions,
+            "feedback": {
+                "total": total_feedback,
+                "thumbs_up": thumbs_up,
+                "thumbs_down": thumbs_down,
+                "accuracy_percentage": accuracy_percentage
+            },
             "sentiment_breakdown": sentiment_data,
-            "timeline": timeline
+            "timeline": timeline,
+            "recent_interactions": recent_list
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -45,13 +45,27 @@ async def transcribe_audio(file_path: str) -> str:
             raise Exception("GROQ_API_KEY is required when USE_LOCAL_MODELS is false.")
         
         print("Transcribing via Groq Whisper API...")
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_map = {
+            ".mp3": "audio/mpeg",
+            ".mp4": "video/mp4",
+            ".wav": "audio/wav",
+            ".ogg": "audio/ogg",
+            ".oga": "audio/ogg",
+            ".m4a": "audio/m4a",
+            ".webm": "audio/webm",
+            ".flac": "audio/flac"
+        }
+        mime_type = mime_map.get(ext, "audio/ogg")
+        upload_name = f"audio{ext}" if ext else "voice.ogg"
+        
         async with httpx.AsyncClient(timeout=60.0) as client:
             with open(file_path, "rb") as f:
                 response = await client.post(
                     "https://api.groq.com/openai/v1/audio/translations",
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                     data={"model": "whisper-large-v3"},
-                    files={"file": ("voice.ogg", f, "audio/ogg")}
+                    files={"file": (upload_name, f, mime_type)}
                 )
             response.raise_for_status()
             return response.json().get("text", "")

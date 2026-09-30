@@ -67,30 +67,43 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error fetching history: {e}")
         await update.message.reply_text("❌ Could not fetch history. Please try again later.")
 
-async def process_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Download the voice message and send it to the FastAPI backend."""
-    duration = getattr(update.message.voice, 'duration', 0)
+async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Download the voice/audio/video message and send it to the FastAPI backend."""
+    media_obj = (
+        update.message.voice 
+        or update.message.audio 
+        or update.message.video_note
+        or update.message.video
+        or update.message.document
+    )
+    if not media_obj:
+        return
+        
+    duration = getattr(media_obj, 'duration', 0)
     duration_str = f"{duration}s " if duration else ""
-    status_message = await update.message.reply_text(f"⚡ Transcribing & analyzing your {duration_str}voice note... ✨")
+    status_message = await update.message.reply_text(f"⚡ Transcribing & analyzing your {duration_str}recording... ✨")
     
     try:
-        # Get the voice file from Telegram
-        voice_file = await context.bot.get_file(update.message.voice.file_id)
+        # Get the media file from Telegram
+        media_file = await context.bot.get_file(media_obj.file_id)
         
         # Download the file into memory
         audio_buffer = io.BytesIO()
-        await voice_file.download_to_memory(out=audio_buffer)
+        await media_file.download_to_memory(out=audio_buffer)
+        
+        file_name = getattr(media_obj, 'file_name', None) or 'recording.oga'
+        mime_type = getattr(media_obj, 'mime_type', None) or 'audio/ogg'
         
         # Send to our FastAPI backend
         user_id = f"tg_{update.effective_user.id}"
         headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
         
         async with httpx.AsyncClient(timeout=120.0) as client:
-            files = {'audio': ('voice.oga', audio_buffer.getvalue(), 'audio/ogg')}
+            files = {'audio': (file_name, audio_buffer.getvalue(), mime_type)}
             data = {'user_id': user_id}
             
             response = await client.post(
-                f"{config.FASTAPI_BACKEND_URL}/process-audio",
+                f"{config.FASTAPI_BACKENDURL if hasattr(config, 'FASTAPI_BACKENDURL') else config.FASTAPI_BACKEND_URL}/process-audio",
                 data=data,
                 files=files,
                 headers=headers
@@ -129,8 +142,75 @@ async def process_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         await status_message.delete()
         
     except Exception as e:
-        logger.error(f"Error processing voice message: {e}")
-        await status_message.edit_text(f"❌ Sorry, our AI engines are currently experiencing high traffic or an error occurred. Please try again in a few moments!")
+        logger.error(f"Error processing media message: {e}")
+        await status_message.edit_text("❌ Sorry, our AI engines are currently experiencing high traffic or an error occurred. Please try again in a few moments!")
+
+async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text messages: guide for short greetings, summarize long text."""
+    text = (update.message.text or "").strip()
+    if not text:
+        return
+        
+    words = text.split()
+    if len(words) < 6:
+        # Conversational guidance
+        guide = (
+            "👋 *Hi! I am Vaani.* Your voice & meeting intelligence assistant.\n\n"
+            "Here is what you can send me:\n"
+            "🎙️ *Voice Note:* Tap and speak naturally in Hindi, English, or Hinglish.\n"
+            "🎵 *Audio / Video:* Upload any `.mp3`, `.m4a`, `.wav`, or `.mp4` file.\n"
+            "📝 *Text / Notes:* Paste a long message, transcript, or messy chat to extract bulleted action items!\n\n"
+            "Try sending an audio note or paste some text right now! ✨"
+        )
+        await update.message.reply_text(guide, parse_mode="Markdown")
+        return
+
+    # Long text: Summarize directly!
+    status_message = await update.message.reply_text("⚡ Analyzing your text notes... ✨")
+    user_id = f"tg_{update.effective_user.id}"
+    headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{config.FASTAPI_BACKEND_URL}/process-text",
+                data={"user_id": user_id, "text": text},
+                headers=headers
+            )
+            response.raise_for_status()
+            result = response.json()
+
+        summary = result.get("summary", "")
+        action_items = result.get("action_items", [])
+        sentiment = result.get("sentiment", "Neutral")
+
+        reply = f"🧠 *AI Summary ({sentiment}):*\n{summary}\n\n"
+        if action_items:
+            reply += "✅ *Action Items:*\n"
+            for item in action_items:
+                reply += f"• {item}\n"
+
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        keyboard = [
+            [
+                InlineKeyboardButton("👍 Accurate", callback_data=f"rating_thumbs_up_{result.get('interaction_id', 'unknown')}"),
+                InlineKeyboardButton("👎 Inaccurate", callback_data=f"rating_thumbs_down_{result.get('interaction_id', 'unknown')}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
+        await status_message.delete()
+    except Exception as e:
+        logger.error(f"Error processing text message: {e}")
+        await status_message.edit_text("❌ Sorry, error analyzing text. Please try again!")
+
+async def process_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle photos/images politely."""
+    msg = (
+        "📸 I see an image! Right now, I specialize in **Audio & Text Intelligence**.\n\n"
+        "Send me a **voice note**, **audio file (.mp3, .wav, .m4a)**, or paste a **meeting transcript** to get instant summaries!"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle accuracy rating button clicks."""
@@ -171,8 +251,15 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("history", history_command))
 
-    # on non command i.e message - echo the message on Telegram
-    app.add_handler(MessageHandler(filters.VOICE, process_voice_message))
+    # Media messages: voice notes, audio files, video notes, video clips, and documents
+    media_filter = filters.VOICE | filters.AUDIO | filters.VIDEO_NOTE | filters.VIDEO | filters.Document.ALL
+    app.add_handler(MessageHandler(media_filter, process_media_message))
+    
+    # Text messages: quick onboarding guide or direct text summarization
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_text_message))
+    
+    # Photos
+    app.add_handler(MessageHandler(filters.PHOTO, process_photo_message))
     
     from telegram.ext import CallbackQueryHandler
     app.add_handler(CallbackQueryHandler(feedback_callback))
