@@ -83,12 +83,24 @@ async def transcribe_audio(file_path: str) -> str:
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                     data={
                         "model": "whisper-large-v3",
+                        "temperature": "0.0",
+                        "response_format": "verbose_json",
                         "prompt": "Haan bhai, kal meeting schedule karni hai. We will discuss project updates aur deliverables."
                     },
                     files={"file": (upload_name, f, mime_type)}
                 )
             response.raise_for_status()
-            return response.json().get("text", "")
+            res_json = response.json()
+            
+            # Stitch all segments together to ensure conversational pauses don't cause dropped sentences
+            segments = res_json.get("segments", [])
+            if segments:
+                segment_texts = [seg.get("text", "").strip() for seg in segments if seg.get("text")]
+                stitched = " ".join(segment_texts).strip()
+                full_text = res_json.get("text", "").strip()
+                return stitched if len(stitched) >= len(full_text) else full_text
+            
+            return res_json.get("text", "")
 
     # Local Fallback Execution
     import librosa

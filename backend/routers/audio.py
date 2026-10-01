@@ -52,8 +52,10 @@ async def process_audio(
             
         # Run ML Pipeline
         raw_transcript = await transcribe_audio(temp_path)
+        print(f"[ASR] Raw transcript ({len(raw_transcript)} chars): {raw_transcript}")
         llm_result = await summarize_transcript(raw_transcript)
         final_transcript = llm_result.get("transcript") or raw_transcript
+        print(f"[ASR] Final transcript ({len(final_transcript)} chars): {final_transcript}")
         
         # Save Interaction
         interaction = Interaction(

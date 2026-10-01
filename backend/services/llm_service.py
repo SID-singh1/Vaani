@@ -76,12 +76,15 @@ async def summarize_transcript(transcript: str) -> dict:
     If USE_LOCAL_MODELS is true, uses INT4 Phi-3 model locally.
     If false, dynamically switches to Gemini Pro API.
     """
+    # Detect if transcript contains Hindi Devanagari script
+    has_devanagari = any('\u0900' <= char <= '\u097F' for char in transcript)
+    
     system_prompt = (
-        "You are an intelligent bilingual assistant specialized in Indian speech, business notes, and Hinglish. "
-        "Analyze the provided audio transcript (which may be in Hindi Devanagari script, mixed Hindi-English, or pure English):\n"
-        "1. Transliterate any Hindi or Devanagari text into natural, colloquial Romanized Hinglish (Hindi written using the English alphabet, "
+        "You are an intelligent bilingual assistant specialized in Indian speech, business notes, and Hinglish.\n"
+        "1. Transliterate any Hindi or Devanagari characters into natural, conversational Romanized Hinglish (Hindi written using the English alphabet, "
         "the exact casual way Indians text on WhatsApp, e.g., 'Kal subah 10 baje team meeting karni hai aur draft share karna hai'). "
-        "Preserve English loanwords in clean English. If already in English, keep it as is.\n"
+        "CRITICAL REQUIREMENT: 'hinglish_transcript' must be a 100% COMPLETE, VERBATIM, SENTENCE-BY-SENTENCE transliteration. "
+        "DO NOT summarize, condense, omit, or drop ANY sentences or thoughts. Every single sentence from the original input must be present in sequence.\n"
         "2. Provide an executive summary (1-2 sentences) in clean, professional English.\n"
         "3. Extract concise actionable bullet items in clean, professional English.\n"
         "4. Determine sentiment: 'Positive', 'Neutral', or 'Negative'."
@@ -95,7 +98,7 @@ async def summarize_transcript(transcript: str) -> dict:
         user_prompt = (
             f"Transcript: {transcript}\n\n"
             "Respond strictly with a JSON object containing keys:\n"
-            "- 'hinglish_transcript': (string) the transcript converted to natural Romanized Hinglish (English alphabet) / English.\n"
+            "- 'hinglish_transcript': (string) complete, verbatim transliteration into Romanized Hinglish (English alphabet) without omitting any sentences.\n"
             "- 'summary': (string) executive summary in clean English.\n"
             "- 'action_items': (array of strings) actionable checklist in clean English.\n"
             "- 'sentiment': (string) 'Positive', 'Neutral', or 'Negative'."
@@ -129,7 +132,12 @@ async def summarize_transcript(transcript: str) -> dict:
                         if not isinstance(action_items, list):
                             action_items = [action_items]
                             
-                        hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
+                        # If transcript didn't have Devanagari in the first place, keep original transcript verbatim to avoid any dropped sentences!
+                        if not has_devanagari:
+                            hinglish_transcript = transcript
+                        else:
+                            hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
+                            
                         return {
                             "transcript": hinglish_transcript,
                             "summary": result.get("summary", ""),
@@ -167,7 +175,10 @@ async def summarize_transcript(transcript: str) -> dict:
                 if not isinstance(action_items, list):
                     action_items = [action_items]
                     
-                hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
+                if not has_devanagari:
+                    hinglish_transcript = transcript
+                else:
+                    hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
                 return {
                     "transcript": hinglish_transcript,
                     "summary": result.get("summary", ""),
@@ -232,7 +243,12 @@ async def summarize_transcript(transcript: str) -> dict:
                 if not isinstance(action_items, list):
                     action_items = [action_items]
                     
+                if not has_devanagari:
+                    hinglish_transcript = transcript
+                else:
+                    hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
                 return {
+                    "transcript": hinglish_transcript,
                     "summary": result.get("summary", ""),
                     "action_items": action_items,
                     "sentiment": result.get("sentiment", "Neutral")
