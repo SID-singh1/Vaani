@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from db.database import get_db
-from db.models import User, Interaction
+from db.models import User, Interaction, Feedback
 from core.config import config
 
 router = APIRouter()
@@ -74,6 +74,18 @@ def get_analytics(request: Request, days: int = 7, db: Session = Depends(get_db)
                 "accuracy_rating": r.accuracy_rating or "unrated"
             })
 
+        # 10 Most recent direct user feedback messages
+        feedback_records = db.query(Feedback).order_by(Feedback.timestamp.desc()).limit(10).all()
+        feedback_list = [
+            {
+                "id": f.id,
+                "timestamp": f.timestamp.strftime("%Y-%m-%d %H:%M") if f.timestamp else "",
+                "user_id": f.user_id[:6] + "..." if f.user_id and len(f.user_id) > 6 else f.user_id,
+                "message": f.message
+            }
+            for f in feedback_records
+        ]
+
         return {
             "total_users": total_users,
             "total_interactions": total_interactions,
@@ -86,7 +98,8 @@ def get_analytics(request: Request, days: int = 7, db: Session = Depends(get_db)
             },
             "sentiment_breakdown": sentiment_data,
             "timeline": timeline,
-            "recent_interactions": recent_list
+            "recent_interactions": recent_list,
+            "user_feedbacks": feedback_list
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

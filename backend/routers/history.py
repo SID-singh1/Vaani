@@ -6,10 +6,17 @@ from db.models import Interaction
 from schemas.api_schemas import HistoryResponse, InteractionHistoryItem
 from core.config import config
 
+from typing import Optional, List
+from pydantic import BaseModel
+
 router = APIRouter()
 
+class DeleteHistoryRequest(BaseModel):
+    interaction_ids: Optional[List[str]] = None
+    delete_all: bool = False
+
 @router.get("/history/{user_id}", response_model=HistoryResponse)
-def get_history(user_id: str, request: Request, db: Session = Depends(get_db)):
+def get_history(user_id: str, request: Request, limit: int = 5, db: Session = Depends(get_db)):
     # Protect Telegram users' privacy: Only authorized requests can query Telegram user histories
     if user_id.startswith("tg_"):
         auth_header = request.headers.get("X-Internal-Secret", "")
@@ -20,7 +27,8 @@ def get_history(user_id: str, request: Request, db: Session = Depends(get_db)):
                 detail="Access to private Telegram history is restricted. Use the /history command inside the Telegram bot."
             )
 
-    interactions = db.query(Interaction).filter(Interaction.user_id == user_id).order_by(Interaction.timestamp.desc()).limit(5).all()
+    safe_limit = min(max(1, limit), 50)
+    interactions = db.query(Interaction).filter(Interaction.user_id == user_id).order_by(Interaction.timestamp.desc()).limit(safe_limit).all()
     
     history_items = []
     for interaction in interactions:
@@ -36,3 +44,18 @@ def get_history(user_id: str, request: Request, db: Session = Depends(get_db)):
             )
         )
     return HistoryResponse(history=history_items)
+
+@router.post("/history/{user_id}/delete")
+def delete_history(user_id: str, request: Request, payload: Optional[DeleteHistoryRequest] = None, db: Session = Depends(get_db)):
+    if user_id.startswith("tg_"):
+        auth_header = request.headers.get("X-Internal-Secret", "")
+        if auth_header != config.INTERNAL_API_SECRET:
+            raise HTTPException(status_code=403, detail="Unauthorized")
+
+    query = db.query(Interaction).filter(Interaction.user_id == user_id)
+    if payload and payload.interaction_ids and not payload.delete_all:
+        query = query.filter(Interaction.id.in_(payload.interaction_ids))
+    
+    deleted_count = query.delete(synchronize_session=False)
+    db.commit()
+    return {"status": "success", "deleted_count": deleted_count}

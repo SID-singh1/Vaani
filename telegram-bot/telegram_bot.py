@@ -1,9 +1,10 @@
 import os
 import io
+import re
 import httpx
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from config import config
 
 # Set up logging
@@ -14,58 +15,150 @@ logger = logging.getLogger(__name__)
 config.validate()
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a message when the command /start is issued."""
+    """Send welcome guide when /start is issued."""
     welcome_message = (
-        "👋 Welcome to Vaani Voice Assistant!\n\n"
-        "I am your lightning-fast AI assistant. "
-        "Just send or forward me a voice note in Hinglish, and I will instantly transcribe it, "
-        "summarize it, and extract action items for you.\n\n"
-        "🛠 *Available Commands:*\n"
-        "/start - Show this welcome message\n"
-        "/help - How to use the bot\n"
-        "/history - View your last 5 transcriptions\n\n"
-        "Try sending a voice note right now!"
+        "👋 *Welcome to Vaani Voice Assistant!*\n\n"
+        "I am your lightning-fast AI meeting & voice intelligence assistant. "
+        "Speak naturally in **Hinglish**, **Hindi**, or **English**, and I will instantly transcribe, "
+        "summarize, and extract actionable checklists for you.\n\n"
+        "🛠️ *Quick Commands:*\n"
+        "• `/help` — Full instructions & command guide\n"
+        "• `/history [n]` — View your previous summaries (e.g. `/history 5` or `/history all`)\n"
+        "• `/delete` — Selectively delete specific notes or wipe all records\n"
+        "• `/feedback <text>` — Send feedback or feature requests\n\n"
+        "🎙️ *Try it right now:* Send me a quick voice note in Hinglish!"
     )
     await update.message.reply_text(welcome_message, parse_mode="Markdown")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a message when the command /help is issued."""
+    """Send comprehensive instructions and command list."""
     help_text = (
-        "🎤 *How to use Vaani:*\n\n"
-        "1. Hold the microphone button to record a voice note.\n"
-        "2. Speak naturally in Hindi, English, or a mix of both (Hinglish).\n"
-        "3. Send the note.\n\n"
-        "I will process it using our blazing fast AI engines and reply with a clean summary."
+        "🎙️ *Vaani — AI Voice & Meeting Assistant*\n\n"
+        "Transform messy spoken thoughts and recordings into structured, actionable notes instantly!\n\n"
+        "✨ *How to Use:*\n"
+        "• *Voice Note:* Tap & speak naturally in Hinglish, Hindi, or English.\n"
+        "• *Audio / Video:* Upload any `.mp3`, `.m4a`, `.wav`, `.opus`, or `.mp4` file (up to 15MB).\n"
+        "• *Text / Transcripts:* Paste raw meeting notes or messy chat to extract bulleted action items.\n\n"
+        "🛠️ *Available Commands:*\n"
+        "• `/start` — Restart & show welcome guide\n"
+        "• `/help` — View this full command menu\n"
+        "• `/history [n]` — View past notes (e.g. `/history 3` or `/history all`)\n"
+        "• `/delete` — Selectively delete specific notes or wipe your history\n"
+        "• `/feedback <text>` — Send feedback or suggestions to the developers\n\n"
+        "💡 *Tip:* Speak naturally in Hinglish! Vaani preserves your transcript in Romanized Hinglish while producing clean executive action items in English! 🚀"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fetch the user's transcription history."""
+    """Fetch user's transcription history with optional count limit."""
     user_id = f"tg_{update.effective_user.id}"
-    await update.message.reply_text("⏳ Fetching your history...")
+    
+    limit = 5
+    if context.args:
+        arg = context.args[0].lower()
+        if arg in ["all", "max"]:
+            limit = 25
+        elif arg.isdigit():
+            limit = min(max(1, int(arg)), 25)
+
+    status = await update.message.reply_text("⏳ Fetching your history...")
     
     try:
         headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(f"{config.FASTAPI_BACKEND_URL}/history/{user_id}", headers=headers)
+            response = await client.get(
+                f"{config.FASTAPI_BACKEND_URL}/history/{user_id}?limit={limit}",
+                headers=headers
+            )
             response.raise_for_status()
             data = response.json()
             
         history = data.get("history", [])
         if not history:
-            await update.message.reply_text("You haven't processed any voice notes yet!")
+            await status.edit_text("📭 You haven't processed any voice notes yet!")
             return
             
-        reply = "📚 *Your Last 5 Transcriptions:*\n\n"
+        reply = f"📚 *Your Recent Notes (Showing {len(history)}):*\n\n"
         for idx, item in enumerate(history):
             date = item['timestamp'][:10]
+            sentiment = item.get('sentiment', 'Neutral')
             summary = item.get('summary', 'No summary')
-            reply += f"*{idx+1}. {date}*\n_{summary}_\n\n"
+            reply += f"*{idx+1}.* 📅 *{date}* `[{sentiment}]`\n_{summary}_\n\n"
             
-        await update.message.reply_text(reply, parse_mode="Markdown")
+        reply += "💡 *Tip:* Type `/delete` if you want to remove any of these notes."
+        await status.edit_text(reply, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Error fetching history: {e}")
-        await update.message.reply_text("❌ Could not fetch history. Please try again later.")
+        await status.edit_text("⚡ *High Demand:* Could not fetch history right now. Please try again in a moment!")
+
+async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle user feedback submissions."""
+    user_id = f"tg_{update.effective_user.id}"
+    feedback_text = " ".join(context.args).strip() if context.args else ""
+    
+    if not feedback_text:
+        await update.message.reply_text(
+            "💬 *Send Feedback:*\n\n"
+            "Please include your thoughts after the command, for example:\n"
+            "`/feedback Loved the Hinglish transcription, but please add PDF export!`",
+            parse_mode="Markdown"
+        )
+        return
+        
+    try:
+        headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                f"{config.FASTAPI_BACKEND_URL}/user-feedback",
+                data={"user_id": user_id, "message": feedback_text},
+                headers=headers
+            )
+        await update.message.reply_text("🙏 *Thank you!* Your feedback has been received and will help us make Vaani better! ✨", parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Error submitting user feedback: {e}")
+        await update.message.reply_text("⚡ *High Traffic:* Could not submit feedback right now. Please try again in a few moments!")
+
+async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Initiate selective note deletion flow."""
+    user_id = f"tg_{update.effective_user.id}"
+    status = await update.message.reply_text("⏳ Loading your notes for deletion...")
+    
+    try:
+        headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{config.FASTAPI_BACKEND_URL}/history/{user_id}?limit=15",
+                headers=headers
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+        history = data.get("history", [])
+        if not history:
+            await status.edit_text("📭 You don't have any saved notes to delete.")
+            return
+
+        delete_state = {}
+        msg = "🗑️ *Select Notes to Delete:*\n\n"
+        for idx, item in enumerate(history):
+            num = idx + 1
+            delete_state[str(num)] = item["id"]
+            date = item['timestamp'][:10]
+            summary = item.get('summary', 'No summary')
+            if len(summary) > 75:
+                summary = summary[:72] + "..."
+            msg += f"*{num}.* 📅 *{date}* — _{summary}_\n"
+
+        msg += (
+            "\n*Reply with the number(s) you wish to delete* (e.g. `1, 3` or `2`), "
+            "or type `all` to wipe everything.\n"
+            "*(Type `cancel` to exit)*"
+        )
+        context.user_data["delete_state"] = delete_state
+        await status.edit_text(msg, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Error initiating delete: {e}")
+        await status.edit_text("⚡ *High Demand:* Could not retrieve notes. Please try again in a moment!")
 
 async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Download the voice/audio/video message and send it to the FastAPI backend."""
@@ -159,10 +252,70 @@ async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         await status_message.edit_text("⚡ *Processing Queue Busy:* Our AI engine encountered high demand. Please try sending again in a few moments!")
 
 async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages: guide for short greetings, summarize long text."""
+    """Handle text messages: deletion inputs, conversational guidance, or text summarization."""
     text = (update.message.text or "").strip()
     if not text:
         return
+
+    # Check if user is in an active deletion flow
+    delete_state = context.user_data.get("delete_state")
+    if delete_state:
+        lowered = text.lower().strip()
+        if lowered in ["cancel", "exit", "stop", "back"]:
+            context.user_data.pop("delete_state", None)
+            context.user_data.pop("pending_delete_ids", None)
+            await update.message.reply_text("❌ *Deletion cancelled.* Your notes remain safe.", parse_mode="Markdown")
+            return
+            
+        if lowered == "all":
+            keyboard = [
+                [
+                    InlineKeyboardButton("🗑️ Yes, Delete All", callback_data="delete_confirm_all"),
+                    InlineKeyboardButton("❌ Cancel", callback_data="delete_cancel")
+                ]
+            ]
+            await update.message.reply_text(
+                "⚠️ *Confirm Wipe All Notes:*\n\n"
+                "Are you sure you want to permanently delete **ALL** your notes from the database? "
+                "This action cannot be undone.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+        if re.match(r'^[\d\s,]+$', text):
+            raw_nums = re.findall(r'\b\d+\b', text)
+            valid_nums = [n for n in raw_nums if n in delete_state]
+            if not valid_nums:
+                await update.message.reply_text(
+                    "⚠️ *Invalid numbers.* Please reply with valid numbers from the list above (e.g. `1, 3`), or type `cancel`.",
+                    parse_mode="Markdown"
+                )
+                return
+
+            valid_nums = list(dict.fromkeys(valid_nums))
+            selected_ids = [delete_state[n] for n in valid_nums]
+            context.user_data["pending_delete_ids"] = selected_ids
+            num_str = ", ".join(f"#{n}" for n in valid_nums)
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Confirm Delete", callback_data="delete_confirm_selected"),
+                    InlineKeyboardButton("❌ Cancel", callback_data="delete_cancel")
+                ]
+            ]
+            await update.message.reply_text(
+                f"⚠️ *Confirm Deletion:*\n\n"
+                f"Are you sure you want to permanently delete note(s) **{num_str}** from the database? "
+                f"This action cannot be undone.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+        # If user typed something else, clear delete_state and treat as normal text
+        context.user_data.pop("delete_state", None)
+        context.user_data.pop("pending_delete_ids", None)
         
     words = text.split()
     if len(words) < 6:
@@ -203,7 +356,6 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
             for item in action_items:
                 reply += f"• {item}\n"
 
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         keyboard = [
             [
                 InlineKeyboardButton("👍 Accurate", callback_data=f"rating_thumbs_up_{result.get('interaction_id', 'unknown')}"),
@@ -234,32 +386,81 @@ async def process_photo_message(update: Update, context: ContextTypes.DEFAULT_TY
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle accuracy rating button clicks."""
+async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle accuracy feedback rating and deletion confirmation callbacks."""
     query = update.callback_query
     await query.answer()
     
     data = query.data
+    user_id = f"tg_{update.effective_user.id}"
+    headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
+
     if data.startswith("rating_"):
         parts = data.split("_")
         rating = parts[1] + "_" + parts[2] # thumbs_up or thumbs_down
         interaction_id = "_".join(parts[3:])
         
         try:
-            headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(
                     f"{config.FASTAPI_BACKEND_URL}/feedback",
                     data={"interaction_id": interaction_id, "rating": rating},
                     headers=headers
                 )
-            # Update the message to remove the buttons and thank the user
             original_text = query.message.text
             thank_you = "✅ Thanks for your feedback!" if rating == "thumbs_up" else "❌ Thanks for your feedback. We will improve!"
             await query.edit_message_text(f"{original_text}\n\n_{thank_you}_", parse_mode="Markdown")
         except Exception as e:
-            logger.error(f"Error submitting feedback: {e}")
-            await query.edit_message_text("❌ Failed to submit feedback.")
+            logger.error(f"Error submitting rating: {e}")
+            await query.edit_message_text("❌ Failed to submit rating.")
+
+    elif data == "delete_confirm_selected":
+        pending_ids = context.user_data.get("pending_delete_ids", [])
+        if not pending_ids:
+            await query.edit_message_text("⚠️ No notes were selected for deletion.")
+            return
+            
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.post(
+                    f"{config.FASTAPI_BACKEND_URL}/history/{user_id}/delete",
+                    json={"interaction_ids": pending_ids},
+                    headers=headers
+                )
+                res.raise_for_status()
+                res_data = res.json()
+                count = res_data.get("deleted_count", len(pending_ids))
+            
+            context.user_data.pop("delete_state", None)
+            context.user_data.pop("pending_delete_ids", None)
+            await query.edit_message_text(f"✅ *Successfully deleted {count} note(s) from your database.*", parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Error deleting notes: {e}")
+            await query.edit_message_text("⚡ *Error:* Could not delete notes right now. Please try again.")
+
+    elif data == "delete_confirm_all":
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.post(
+                    f"{config.FASTAPI_BACKEND_URL}/history/{user_id}/delete",
+                    json={"delete_all": True},
+                    headers=headers
+                )
+                res.raise_for_status()
+                res_data = res.json()
+                count = res_data.get("deleted_count", 0)
+                
+            context.user_data.pop("delete_state", None)
+            context.user_data.pop("pending_delete_ids", None)
+            await query.edit_message_text(f"✅ *All {count} note(s) have been permanently erased from your database.*", parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Error wiping notes: {e}")
+            await query.edit_message_text("⚡ *Error:* Could not wipe history right now. Please try again.")
+
+    elif data == "delete_cancel":
+        context.user_data.pop("delete_state", None)
+        context.user_data.pop("pending_delete_ids", None)
+        await query.edit_message_text("❌ *Deletion cancelled. Your notes remain safe.*", parse_mode="Markdown")
 
 def main():
     """Start the bot."""
@@ -268,23 +469,25 @@ def main():
     # Create the Application and pass it your bot's token.
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
-    # on different commands - answer in Telegram
+    # Commands
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("history", history_command))
+    app.add_handler(CommandHandler("feedback", feedback_command))
+    app.add_handler(CommandHandler("delete", delete_command))
 
     # Media messages: voice notes, audio files, video notes, video clips, and documents
     media_filter = filters.VOICE | filters.AUDIO | filters.VIDEO_NOTE | filters.VIDEO | filters.Document.ALL
     app.add_handler(MessageHandler(media_filter, process_media_message))
     
-    # Text messages: quick onboarding guide or direct text summarization
+    # Text messages: deletion responses, conversational guidance, or text summarization
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_text_message))
     
     # Photos
     app.add_handler(MessageHandler(filters.PHOTO, process_photo_message))
     
-    from telegram.ext import CallbackQueryHandler
-    app.add_handler(CallbackQueryHandler(feedback_callback))
+    # Inline button callbacks
+    app.add_handler(CallbackQueryHandler(handle_callback_query))
 
     # Run the bot until the user presses Ctrl-C
     logger.info("Bot is polling for messages...")

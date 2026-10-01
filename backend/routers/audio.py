@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, UploadFile, File, Form, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from db.database import get_db
-from db.models import User, Interaction
+from db.models import User, Interaction, Feedback
 from schemas.api_schemas import ProcessAudioResponse, UsageStatus
 from services.asr_service import transcribe_audio
 from services.llm_service import summarize_transcript
@@ -142,6 +142,23 @@ def submit_feedback(
         raise HTTPException(status_code=404, detail="Interaction not found")
     
     interaction.accuracy_rating = rating
+    db.commit()
+    return {"status": "success"}
+
+@router.post("/user-feedback")
+def submit_user_feedback(
+    user_id: str = Form(...),
+    message: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        user = User(id=user_id)
+        db.add(user)
+        db.commit()
+
+    feedback_entry = Feedback(user_id=user_id, message=message)
+    db.add(feedback_entry)
     db.commit()
     return {"status": "success"}
 

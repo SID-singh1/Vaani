@@ -76,7 +76,13 @@ async def summarize_transcript(transcript: str) -> dict:
     If USE_LOCAL_MODELS is true, uses INT4 Phi-3 model locally.
     If false, dynamically switches to Gemini Pro API.
     """
-    system_prompt = "You are an intelligent business assistant that analyzes Hindi-English mixed transcriptions. Extract a concise summary (1-2 sentences), a list of action items, and the overall sentiment (Positive, Neutral, or Negative)."
+    system_prompt = (
+        "You are an intelligent business assistant that analyzes Hindi-English mixed (Hinglish) transcriptions. "
+        "Analyze the transcript (which may be in Hinglish, Hindi, or English) and extract a clear, executive summary "
+        "(1-2 sentences) in clean English, a concise list of actionable bullet items in clean English, and the overall "
+        "sentiment (Positive, Neutral, or Negative). If there are specific tasks or next steps mentioned in the speech, "
+        "list them directly as clear action items."
+    )
     
     if not USE_LOCAL_MODELS:
         if not GEMINI_API_KEY:

@@ -79,9 +79,12 @@ async def transcribe_audio(file_path: str) -> str:
         async with httpx.AsyncClient(timeout=60.0) as client:
             with open(file_path, "rb") as f:
                 response = await client.post(
-                    "https://api.groq.com/openai/v1/audio/translations",
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-                    data={"model": "whisper-large-v3"},
+                    data={
+                        "model": "whisper-large-v3",
+                        "prompt": "Yeh ek voice note hai jisme Hindi aur English words hain (Hinglish conversation). Please transcribe what is said accurately in Romanized Hinglish and English script."
+                    },
                     files={"file": (upload_name, f, mime_type)}
                 )
             response.raise_for_status()

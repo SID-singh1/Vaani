@@ -12,6 +12,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     interactions = relationship("Interaction", back_populates="user")
+    feedbacks = relationship("Feedback", back_populates="user")
 
 class Interaction(Base):
     __tablename__ = "interactions"
@@ -28,3 +29,13 @@ class Interaction(Base):
     error_message = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="interactions")
+
+class Feedback(Base):
+    __tablename__ = "feedbacks"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    user_id = Column(String, ForeignKey("users.id"))
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    message = Column(Text, nullable=False)
+
+    user = relationship("User", back_populates="feedbacks")
