@@ -83,7 +83,7 @@ async def transcribe_audio(file_path: str) -> str:
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                     data={
                         "model": "whisper-large-v3",
-                        "prompt": "Yeh ek voice note hai jisme Hindi aur English words hain (Hinglish conversation). Please transcribe what is said accurately in Romanized Hinglish and English script."
+                        "prompt": "Haan bhai, kal meeting schedule karni hai. We will discuss project updates aur deliverables."
                     },
                     files={"file": (upload_name, f, mime_type)}
                 )

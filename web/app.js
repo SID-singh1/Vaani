@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     setupFileInput();
     setupRecording();
+    setupFeedback();
 });
 
 // History Logic
@@ -261,10 +262,79 @@ async function handleFile(file) {
     }
 }
 
+let currentInteractionId = null;
+
+function setupFeedback() {
+    const thumbsUpBtn = document.getElementById('thumbsUpBtn');
+    const thumbsDownBtn = document.getElementById('thumbsDownBtn');
+    const feedbackNotice = document.getElementById('feedbackNotice');
+
+    async function submitRating(rating) {
+        if (!currentInteractionId) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('interaction_id', currentInteractionId);
+            formData.append('rating', rating);
+
+            const res = await fetch(`${API_BASE}/feedback`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (res.ok) {
+                thumbsUpBtn.classList.toggle('active-up', rating === 'thumbs_up');
+                thumbsDownBtn.classList.toggle('active-down', rating === 'thumbs_down');
+                thumbsUpBtn.disabled = true;
+                thumbsDownBtn.disabled = true;
+                if (feedbackNotice) {
+                    feedbackNotice.textContent = rating === 'thumbs_up' ? '✓ Rated accurate!' : '✓ Feedback recorded';
+                    feedbackNotice.classList.remove('hidden');
+                }
+            }
+        } catch (e) {
+            console.error("Failed to submit feedback", e);
+        }
+    }
+
+    if (thumbsUpBtn && thumbsDownBtn) {
+        thumbsUpBtn.addEventListener('click', () => submitRating('thumbs_up'));
+        thumbsDownBtn.addEventListener('click', () => submitRating('thumbs_down'));
+    }
+}
+
 function showResult(data) {
     loadingState.classList.add('hidden');
     dropZone.classList.add('hidden');
     resultsZone.classList.remove('hidden');
+
+    // Track interaction ID for feedback
+    currentInteractionId = data.interaction_id || data.id || null;
+    const thumbsUpBtn = document.getElementById('thumbsUpBtn');
+    const thumbsDownBtn = document.getElementById('thumbsDownBtn');
+    const feedbackNotice = document.getElementById('feedbackNotice');
+
+    if (thumbsUpBtn && thumbsDownBtn) {
+        thumbsUpBtn.disabled = false;
+        thumbsDownBtn.disabled = false;
+        thumbsUpBtn.classList.remove('active-up');
+        thumbsDownBtn.classList.remove('active-down');
+
+        if (data.accuracy_rating === 'thumbs_up') {
+            thumbsUpBtn.classList.add('active-up');
+            thumbsUpBtn.disabled = true;
+            thumbsDownBtn.disabled = true;
+        } else if (data.accuracy_rating === 'thumbs_down') {
+            thumbsDownBtn.classList.add('active-down');
+            thumbsUpBtn.disabled = true;
+            thumbsDownBtn.disabled = true;
+        }
+
+        if (feedbackNotice) {
+            feedbackNotice.classList.add('hidden');
+            feedbackNotice.textContent = '';
+        }
+    }
 
     // Populate Data
     transcriptText.textContent = data.transcript || "No transcript generated.";
