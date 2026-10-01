@@ -77,11 +77,14 @@ async def summarize_transcript(transcript: str) -> dict:
     If false, dynamically switches to Gemini Pro API.
     """
     system_prompt = (
-        "You are an intelligent business assistant that analyzes Hindi-English mixed (Hinglish) transcriptions. "
-        "Analyze the transcript (which may be in Hinglish, Hindi, or English) and extract a clear, executive summary "
-        "(1-2 sentences) in clean English, a concise list of actionable bullet items in clean English, and the overall "
-        "sentiment (Positive, Neutral, or Negative). If there are specific tasks or next steps mentioned in the speech, "
-        "list them directly as clear action items."
+        "You are an intelligent bilingual assistant specialized in Indian speech, business notes, and Hinglish. "
+        "Analyze the provided audio transcript (which may be in Hindi Devanagari script, mixed Hindi-English, or pure English):\n"
+        "1. Transliterate any Hindi or Devanagari text into natural, colloquial Romanized Hinglish (Hindi written using the English alphabet, "
+        "the exact casual way Indians text on WhatsApp, e.g., 'Kal subah 10 baje team meeting karni hai aur draft share karna hai'). "
+        "Preserve English loanwords in clean English. If already in English, keep it as is.\n"
+        "2. Provide an executive summary (1-2 sentences) in clean, professional English.\n"
+        "3. Extract concise actionable bullet items in clean, professional English.\n"
+        "4. Determine sentiment: 'Positive', 'Neutral', or 'Negative'."
     )
     
     if not USE_LOCAL_MODELS:
@@ -89,7 +92,14 @@ async def summarize_transcript(transcript: str) -> dict:
             raise Exception("GEMINI_API_KEY is required when USE_LOCAL_MODELS is false.")
             
         model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        user_prompt = f"Transcript: {transcript}\n\nRespond with a JSON object containing keys: 'summary' (string), 'action_items' (array of strings), and 'sentiment' (Positive/Neutral/Negative)."
+        user_prompt = (
+            f"Transcript: {transcript}\n\n"
+            "Respond strictly with a JSON object containing keys:\n"
+            "- 'hinglish_transcript': (string) the transcript converted to natural Romanized Hinglish (English alphabet) / English.\n"
+            "- 'summary': (string) executive summary in clean English.\n"
+            "- 'action_items': (array of strings) actionable checklist in clean English.\n"
+            "- 'sentiment': (string) 'Positive', 'Neutral', or 'Negative'."
+        )
         
         # Primary method: Direct async HTTPX REST call (bypasses gRPC quirks & SDK version deprecations)
         try:
@@ -119,7 +129,9 @@ async def summarize_transcript(transcript: str) -> dict:
                         if not isinstance(action_items, list):
                             action_items = [action_items]
                             
+                        hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
                         return {
+                            "transcript": hinglish_transcript,
                             "summary": result.get("summary", ""),
                             "action_items": action_items,
                             "sentiment": result.get("sentiment", "Neutral")
@@ -155,7 +167,9 @@ async def summarize_transcript(transcript: str) -> dict:
                 if not isinstance(action_items, list):
                     action_items = [action_items]
                     
+                hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
                 return {
+                    "transcript": hinglish_transcript,
                     "summary": result.get("summary", ""),
                     "action_items": action_items,
                     "sentiment": result.get("sentiment", "Neutral")

@@ -51,13 +51,14 @@ async def process_audio(
             f.write(content)
             
         # Run ML Pipeline
-        transcript = await transcribe_audio(temp_path)
-        llm_result = await summarize_transcript(transcript)
+        raw_transcript = await transcribe_audio(temp_path)
+        llm_result = await summarize_transcript(raw_transcript)
+        final_transcript = llm_result.get("transcript") or raw_transcript
         
         # Save Interaction
         interaction = Interaction(
             user_id=user_id,
-            transcript=transcript,
+            transcript=final_transcript,
             summary=llm_result["summary"],
             action_items=json.dumps(llm_result["action_items"]),
             sentiment=llm_result["sentiment"]
@@ -86,7 +87,7 @@ async def process_audio(
     # Return response
     return ProcessAudioResponse(
         interaction_id=interaction.id,
-        transcript=transcript,
+        transcript=final_transcript,
         summary=llm_result["summary"],
         action_items=llm_result["action_items"],
         sentiment=llm_result["sentiment"],
