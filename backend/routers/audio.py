@@ -35,7 +35,9 @@ async def process_audio(
 
     # Sanitize extension and generate safe UUID filename (prevents directory traversal)
     original_ext = os.path.splitext(audio.filename or "")[1].lower()
-    allowed_exts = [".ogg", ".oga", ".wav", ".mp3", ".webm", ".m4a", ".aac", ".mp4", ".flac", ".mov"]
+    allowed_exts = [".ogg", ".oga", ".opus", ".wav", ".mp3", ".webm", ".m4a", ".aac", ".mp4", ".flac", ".mov"]
+    if original_ext and original_ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"Unsupported format '{original_ext}'. Please upload an audio or video file.")
     safe_ext = original_ext if original_ext in allowed_exts else ".oga"
     safe_filename = f"{uuid.uuid4()}{safe_ext}"
     temp_path = os.path.join(TEMP_DIR, safe_filename)

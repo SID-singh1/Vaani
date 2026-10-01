@@ -46,18 +46,35 @@ async def transcribe_audio(file_path: str) -> str:
         
         print("Transcribing via Groq Whisper API...")
         ext = os.path.splitext(file_path)[1].lower()
-        mime_map = {
-            ".mp3": "audio/mpeg",
-            ".mp4": "video/mp4",
-            ".wav": "audio/wav",
-            ".ogg": "audio/ogg",
-            ".oga": "audio/ogg",
-            ".m4a": "audio/m4a",
-            ".webm": "audio/webm",
-            ".flac": "audio/flac"
-        }
-        mime_type = mime_map.get(ext, "audio/ogg")
-        upload_name = f"audio{ext}" if ext else "voice.ogg"
+        # Groq requires one of: [flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm]
+        # .oga is OGG audio container with Opus/Vorbis, so map .oga -> voice.ogg
+        if ext in [".ogg", ".oga"]:
+            upload_name = "voice.ogg"
+            mime_type = "audio/ogg"
+        elif ext == ".opus":
+            upload_name = "voice.opus"
+            mime_type = "audio/opus"
+        elif ext == ".mp3":
+            upload_name = "audio.mp3"
+            mime_type = "audio/mpeg"
+        elif ext == ".mp4":
+            upload_name = "video.mp4"
+            mime_type = "video/mp4"
+        elif ext == ".wav":
+            upload_name = "audio.wav"
+            mime_type = "audio/wav"
+        elif ext in [".m4a", ".aac"]:
+            upload_name = "audio.m4a"
+            mime_type = "audio/m4a"
+        elif ext == ".webm":
+            upload_name = "audio.webm"
+            mime_type = "audio/webm"
+        elif ext == ".flac":
+            upload_name = "audio.flac"
+            mime_type = "audio/flac"
+        else:
+            upload_name = "voice.ogg"
+            mime_type = "audio/ogg"
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             with open(file_path, "rb") as f:

@@ -141,9 +141,22 @@ async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
         await status_message.delete()
         
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error from backend ({e.response.status_code}): {e.response.text}")
+        if e.response.status_code == 429:
+            await status_message.edit_text("⏳ *Rate limit reached!* You're sending notes faster than the system can process. Please wait 30 seconds before trying again.")
+        elif e.response.status_code == 413:
+            await status_message.edit_text("📁 *File size limit:* Maximum allowed size is 15MB. Please send a shorter audio clip.")
+        elif e.response.status_code == 400:
+            await status_message.edit_text("⚠️ *Unsupported format:* Please send a voice note, or an audio/video file like .mp3, .m4a, .wav, .opus, or .mp4.")
+        else:
+            await status_message.edit_text("⚡ *High Traffic Surge:* Our AI engines are handling heavy demand right now. Please try again in a few moments!")
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        logger.error(f"Connection/Timeout to backend: {e}")
+        await status_message.edit_text("⚡ *High Demand:* Our AI engines are currently processing heavy traffic. Please try sending again in 15–20 seconds!")
     except Exception as e:
-        logger.error(f"Error processing media message: {e}")
-        await status_message.edit_text("❌ Sorry, our AI engines are currently experiencing high traffic or an error occurred. Please try again in a few moments!")
+        logger.error(f"Unexpected error processing media message: {e}", exc_info=True)
+        await status_message.edit_text("⚡ *Processing Queue Busy:* Our AI engine encountered high demand. Please try sending again in a few moments!")
 
 async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages: guide for short greetings, summarize long text."""
@@ -200,9 +213,18 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
         await status_message.delete()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error processing text ({e.response.status_code}): {e.response.text}")
+        if e.response.status_code == 429:
+            await status_message.edit_text("⏳ *Rate limit reached!* You're sending notes faster than the system can process. Please wait 30 seconds before trying again.")
+        else:
+            await status_message.edit_text("⚡ *High Traffic Surge:* Our AI engines are handling heavy demand right now. Please try again in a moment!")
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        logger.error(f"Connection/Timeout to backend: {e}")
+        await status_message.edit_text("⚡ *High Demand:* Our AI engines are currently processing heavy traffic. Please try sending again in 15–20 seconds!")
     except Exception as e:
-        logger.error(f"Error processing text message: {e}")
-        await status_message.edit_text("❌ Sorry, error analyzing text. Please try again!")
+        logger.error(f"Error processing text message: {e}", exc_info=True)
+        await status_message.edit_text("⚡ *Processing Queue Busy:* Our AI engine encountered high demand. Please try again in a moment!")
 
 async def process_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle photos/images politely."""
