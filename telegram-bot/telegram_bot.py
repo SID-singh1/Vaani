@@ -231,7 +231,35 @@ async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
+        # Telegram has a 4096-char limit per message. Split if needed.
+        TELEGRAM_MAX_LEN = 4000  # Leave some margin for safety
+        
+        if len(reply) <= TELEGRAM_MAX_LEN:
+            await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
+        else:
+            # Split: send transcript first, then summary + action items with feedback buttons
+            transcript_msg = f"📝 *Transcription:*\n_{transcription}_"
+            summary_msg = f"🧠 *AI Summary ({sentiment}):*\n{summary}\n\n"
+            if action_items:
+                summary_msg += "✅ *Action Items:*\n"
+                for item in action_items:
+                    summary_msg += f"• {item}\n"
+            
+            # Send transcript in chunks if it's very long
+            for i in range(0, len(transcript_msg), TELEGRAM_MAX_LEN):
+                chunk = transcript_msg[i:i + TELEGRAM_MAX_LEN]
+                try:
+                    await update.message.reply_text(chunk, parse_mode="Markdown")
+                except Exception:
+                    # If Markdown parsing fails on a chunk boundary, send as plain text
+                    await update.message.reply_text(chunk)
+            
+            # Send summary with feedback buttons
+            try:
+                await update.message.reply_text(summary_msg, parse_mode="Markdown", reply_markup=reply_markup)
+            except Exception:
+                await update.message.reply_text(summary_msg, reply_markup=reply_markup)
+        
         await status_message.delete()
         
     except httpx.HTTPStatusError as e:

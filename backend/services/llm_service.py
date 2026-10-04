@@ -113,10 +113,11 @@ async def summarize_transcript(transcript: str) -> dict:
                 "contents": [{"parts": [{"text": user_prompt}]}],
                 "generationConfig": {
                     "responseMimeType": "application/json",
-                    "temperature": 0.1
+                    "temperature": 0.1,
+                    "maxOutputTokens": 8192
                 }
             }
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(url, json=payload)
                 if response.status_code == 200:
                     data = response.json()
@@ -160,7 +161,8 @@ async def summarize_transcript(transcript: str) -> dict:
                     system_instruction=system_prompt,
                     generation_config=genai.GenerationConfig(
                         response_mime_type="application/json",
-                        temperature=0.1
+                        temperature=0.1,
+                        max_output_tokens=8192
                     )
                 )
                 response = await sdk_model.generate_content_async(user_prompt)
