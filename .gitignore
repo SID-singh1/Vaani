@@ -43,3 +43,6 @@ future_work.md
 # my personal purpposed, of logging and all
 for_my_purpose.txt
 nextstage.txt
+scratch/
+*.wav
+*.mp3

@@ -80,147 +80,96 @@ def _get_audio_duration(file_path: str) -> float:
             pass
     return 0.0
 
-def _convert_to_wav(file_path: str) -> str:
+def _convert_to_audio_for_groq(file_path: str) -> tuple[str, str, str]:
     """
-    Pre-convert any audio format to 16kHz mono WAV using ffmpeg.
-    Applies:
-    - -fflags +genpts: repairs presentation timestamps in forwarded/shared audio
-    - dynaudnorm: dynamic audio normalization so quiet speech is heard clearly
-    - silenceremove: strips dead trailing silence to prevent Whisper hallucinations
-    Returns path to the normalized WAV file (caller must clean up).
+    Pre-converts audio for Groq Whisper API without destructive filtering.
+    Standardizes to 16kHz mono 16-bit PCM WAV (lossless, zero distortion).
+    If the WAV exceeds 24 MB (~12.5 min of speech), automatically encodes to 64kbps MP3,
+    which safely fits up to 50 minutes of continuous audio within Groq's 25 MB limit.
+    Returns (prepared_file_path, upload_name, mime_type).
     """
-    wav_path = file_path + ".groq.wav"
-    try:
-        subprocess.run(
-            ["ffmpeg", "-y", "-fflags", "+genpts", "-i", file_path,
-             "-af", "dynaudnorm=f=150:g=15,silenceremove=stop_periods=-1:stop_duration=1.5:stop_threshold=-45dB",
-             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
-        )
-        return wav_path
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-
-    # Fallback without audio filters if dynaudnorm is unsupported on an edge-case container
+    wav_path = file_path + ".clean.wav"
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-fflags", "+genpts", "-i", file_path,
              "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
         )
-        return wav_path
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"[ASR] ffmpeg conversion failed ({e}), will send original file to Groq")
-        return None
+        size_bytes = os.path.getsize(wav_path)
+        # Groq's maximum file size limit is 25 MB (26,214,400 bytes)
+        if size_bytes <= 24 * 1024 * 1024:
+            return (wav_path, "audio.wav", "audio/wav")
 
-def _split_into_chunks(wav_path: str, segment_seconds: int = 40) -> list:
-    """
-    Splits long audio into ~40s segments to ensure Whisper never drops
-    subsequent speech or hits the 30-second early termination bug.
-    """
-    chunk_dir = wav_path + "_chunks"
-    os.makedirs(chunk_dir, exist_ok=True)
-    pattern = os.path.join(chunk_dir, "chunk_%03d.wav")
-    try:
-        subprocess.run([
-            "ffmpeg", "-y", "-i", wav_path,
-            "-f", "segment", "-segment_time", str(segment_seconds),
-            "-c", "copy", pattern
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        chunks = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.wav")))
-        return chunks
+        # For long audio (>24 MB), encode to 64kbps MP3 (fits up to 50 min in single file)
+        mp3_path = file_path + ".clean.mp3"
+        subprocess.run(
+            ["ffmpeg", "-y", "-fflags", "+genpts", "-i", wav_path,
+             "-ar", "16000", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "64k", mp3_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+        )
+        try: os.remove(wav_path)
+        except: pass
+        return (mp3_path, "audio.mp3", "audio/mpeg")
+
     except Exception as e:
-        print(f"[ASR] ffmpeg chunking failed ({e}), will transcribe as single file")
-        return []
+        print(f"[ASR] ffmpeg conversion failed ({e}), using original file directly")
+        if os.path.exists(wav_path):
+            try: os.remove(wav_path)
+            except: pass
+
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_map = {
+            ".ogg": ("voice.ogg", "audio/ogg"),
+            ".oga": ("voice.ogg", "audio/ogg"),
+            ".opus": ("voice.opus", "audio/opus"),
+            ".mp3": ("audio.mp3", "audio/mpeg"),
+            ".mp4": ("video.mp4", "video/mp4"),
+            ".wav": ("audio.wav", "audio/wav"),
+            ".m4a": ("audio.m4a", "audio/m4a"),
+            ".aac": ("audio.m4a", "audio/m4a"),
+            ".webm": ("audio.webm", "audio/webm"),
+            ".flac": ("audio.flac", "audio/flac"),
+        }
+        upload_name, mime_type = mime_map.get(ext, ("voice.ogg", "audio/ogg"))
+        return (file_path, upload_name, mime_type)
 
 async def transcribe_audio(file_path: str) -> str:
     """
     Transcribes the given audio file.
+    If USE_LOCAL_MODELS is false, uses Groq's high-speed whisper-large-v3 API in a single,
+    continuous pass without destructive chunking or pause clipping.
     If USE_LOCAL_MODELS is true, uses INT8 quantized Whisper ONNX model locally.
-    If false, dynamically switches to Groq's blazing fast whisper-large-v3 API.
-    Handles long audio files by intelligently chunking into ~40s parallel pieces.
     """
     if not USE_LOCAL_MODELS:
         if not GROQ_API_KEY:
             raise Exception("GROQ_API_KEY is required when USE_LOCAL_MODELS is false.")
         
-        print("Transcribing via Groq Whisper API...")
-        
-        # Pre-convert and normalize to 16kHz WAV
-        wav_path = _convert_to_wav(file_path)
-        upload_path = wav_path if wav_path else file_path
+        # Convert to clean 16kHz mono audio (preserves 100% of speech and acoustic boundaries)
+        prep_path, upload_name, mime_type = _convert_to_audio_for_groq(file_path)
         
         try:
-            duration = _get_audio_duration(upload_path)
-            print(f"[ASR] Detected audio duration: {duration:.1f}s")
-            
-            # If audio is longer than 45 seconds and we have a WAV file, chunk it
-            # This completely eliminates Whisper dropping the second half of recordings!
-            if duration > 45.0 and wav_path:
-                chunks = _split_into_chunks(wav_path, segment_seconds=40)
-                if len(chunks) > 1:
-                    print(f"[ASR] Long audio ({duration:.1f}s) split into {len(chunks)} chunks. Processing in parallel...")
-                    sem = asyncio.Semaphore(2)  # Process up to 2 chunks concurrently
-                    
-                    async def transcribe_chunk(chunk_file):
-                        async with sem:
-                            raw = await _call_groq_whisper(chunk_file, "audio.wav", "audio/wav")
-                            return _clean_whisper_hallucinations(raw)
-                    
-                    chunk_transcripts = await asyncio.gather(*(transcribe_chunk(c) for c in chunks))
-                    
-                    # Cleanup chunk files
-                    for c in chunks:
-                        if os.path.exists(c):
-                            try: os.remove(c)
-                            except: pass
-                    try:
-                        os.rmdir(wav_path + "_chunks")
-                    except: pass
-                    
-                    stitched = " ".join([t for t in chunk_transcripts if t.strip()]).strip()
-                    print(f"[ASR] Successfully stitched {len(chunks)} chunks ({len(stitched)} chars).")
-                    return stitched
-
-            # Single chunk execution for short audio (<= 45s) or fallback
-            if wav_path:
-                upload_name = "audio.wav"
-                mime_type = "audio/wav"
-            else:
-                ext = os.path.splitext(file_path)[1].lower()
-                mime_map = {
-                    ".ogg": ("voice.ogg", "audio/ogg"),
-                    ".oga": ("voice.ogg", "audio/ogg"),
-                    ".opus": ("voice.opus", "audio/opus"),
-                    ".mp3": ("audio.mp3", "audio/mpeg"),
-                    ".mp4": ("video.mp4", "video/mp4"),
-                    ".wav": ("audio.wav", "audio/wav"),
-                    ".m4a": ("audio.m4a", "audio/m4a"),
-                    ".aac": ("audio.m4a", "audio/m4a"),
-                    ".webm": ("audio.webm", "audio/webm"),
-                    ".flac": ("audio.flac", "audio/flac"),
-                }
-                upload_name, mime_type = mime_map.get(ext, ("voice.ogg", "audio/ogg"))
-            
-            raw_text = await _call_groq_whisper(upload_path, upload_name, mime_type)
+            duration = _get_audio_duration(prep_path)
+            file_mb = os.path.getsize(prep_path) / (1024 * 1024)
+            print(f"[ASR] Processing audio via Groq whisper-large-v3 (duration: {duration:.1f}s, size: {file_mb:.2f} MB)...")
+            raw_text = await _call_groq_whisper(prep_path, upload_name, mime_type)
             return _clean_whisper_hallucinations(raw_text)
-            
         finally:
-            # Clean up the intermediate WAV file
-            if wav_path and os.path.exists(wav_path):
-                os.remove(wav_path)
+            # Clean up temporary converted file if one was created
+            if prep_path != file_path and os.path.exists(prep_path):
+                try: os.remove(prep_path)
+                except: pass
 
 
 async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str, max_retries: int = 2) -> str:
     """
     Calls Groq Whisper API with retry logic for transient errors (429, 500, 503).
-    Uses a neutral vocabulary guide prompt (not full sentences) so prompt text never leaks.
+    Transcribes in a continuous single pass using whisper-large-v3 for maximum accuracy.
     """
     last_error = None
     for attempt in range(max_retries + 1):
         try:
             file_size = os.path.getsize(upload_path)
-            timeout = max(60.0, min(180.0, file_size / (1024 * 50)))
+            timeout = max(90.0, min(300.0, file_size / (1024 * 30)))
             
             async with httpx.AsyncClient(timeout=timeout) as client:
                 with open(upload_path, "rb") as f:
@@ -230,9 +179,7 @@ async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str,
                         data={
                             "model": "whisper-large-v3",
                             "temperature": "0.0",
-                            "response_format": "verbose_json",
-                            # Neutral vocabulary guide — does NOT leak complete sentences into transcripts
-                            "prompt": "Hinglish, meeting notes, project updates, tasks, review, WhatsApp Hindi."
+                            "response_format": "json"
                         },
                         files={"file": (upload_name, f, mime_type)}
                     )
@@ -250,17 +197,8 @@ async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str,
                     response.raise_for_status()
                 
                 res_json = response.json()
-                segments = res_json.get("segments", [])
-                
-                # Check segments vs full text
-                if segments:
-                    segment_texts = [seg.get("text", "").strip() for seg in segments if seg.get("text")]
-                    stitched = " ".join(segment_texts).strip()
-                    full_text = res_json.get("text", "").strip()
-                    result = stitched if len(stitched) >= len(full_text) else full_text
-                    return result
-                
-                return res_json.get("text", "")
+                text = res_json.get("text", "").strip()
+                return text
                 
         except httpx.TimeoutException as e:
             last_error = e

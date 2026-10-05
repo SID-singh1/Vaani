@@ -191,7 +191,7 @@ async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         user_id = f"tg_{update.effective_user.id}"
         headers = {"X-Internal-Secret": config.INTERNAL_API_SECRET}
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             files = {'audio': (file_name, audio_buffer.getvalue(), mime_type)}
             data = {'user_id': user_id}
             

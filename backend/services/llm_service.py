@@ -112,7 +112,7 @@ async def summarize_transcript(transcript: str) -> dict:
         else:
             cand = str(raw_dict.get("hinglish_transcript", "")).strip()
             # If transliteration is reasonably complete and not truncated, use it; otherwise fallback
-            if cand and len(cand) >= int(len(transcript) * 0.5):
+            if cand and len(cand) >= int(len(transcript) * 0.7):
                 final_transcript = cand
             else:
                 final_transcript = transcript

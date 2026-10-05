@@ -116,9 +116,10 @@ async def process_text(
 
     try:
         llm_result = await summarize_transcript(text)
+        final_transcript = llm_result.get("transcript") or text
         interaction = Interaction(
             user_id=user_id,
-            transcript=text,
+            transcript=final_transcript,
             summary=llm_result["summary"],
             action_items=json.dumps(llm_result["action_items"]),
             sentiment=llm_result["sentiment"]
@@ -129,7 +130,7 @@ async def process_text(
 
         return ProcessAudioResponse(
             interaction_id=interaction.id,
-            transcript=text,
+            transcript=final_transcript,
             summary=llm_result["summary"],
             action_items=llm_result["action_items"],
             sentiment=llm_result["sentiment"],
