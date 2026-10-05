@@ -276,8 +276,12 @@ async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"Connection/Timeout to backend: {e}")
         await status_message.edit_text("⚡ *High Demand:* Our AI engines are currently processing heavy traffic. Please try sending again in 15–20 seconds!")
     except Exception as e:
+        err_str = str(e).lower()
         logger.error(f"Unexpected error processing media message: {e}", exc_info=True)
-        await status_message.edit_text("⚡ *Processing Queue Busy:* Our AI engine encountered high demand. Please try sending again in a few moments!")
+        if "file is too big" in err_str:
+            await status_message.edit_text("📁 *File size limit:* Telegram prevents bots from downloading files larger than 20MB. Please send a shorter audio clip.")
+        else:
+            await status_message.edit_text("⚡ *Processing Queue Busy:* Our AI engine encountered high demand. Please try sending again in a few moments!")
 
 async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages: deletion inputs, conversational guidance, or text summarization."""

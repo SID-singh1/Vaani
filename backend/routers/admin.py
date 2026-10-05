@@ -10,11 +10,13 @@ router = APIRouter()
 
 @router.get("/analytics")
 def get_analytics(request: Request, days: int = 7, db: Session = Depends(get_db)):
-    if config.ADMIN_SECRET_KEY:
-        auth_header = request.headers.get("x-admin-key", "")
-        auth_query = request.query_params.get("key", "")
-        if auth_header != config.ADMIN_SECRET_KEY and auth_query != config.ADMIN_SECRET_KEY:
-            raise HTTPException(status_code=401, detail="Unauthorized: Invalid Admin Key")
+    if not config.ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Admin access disabled: ADMIN_SECRET_KEY is not configured on server.")
+    
+    auth_header = request.headers.get("x-admin-key", "")
+    auth_query = request.query_params.get("key", "")
+    if auth_header != config.ADMIN_SECRET_KEY and auth_query != config.ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid Admin Key")
     try:
         # Total users and interactions
         total_users = db.query(User).count()

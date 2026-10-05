@@ -8,10 +8,17 @@ function getUserId() {
     return userId;
 }
 
+// Security: Escape HTML helper to prevent XSS
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 const USER_ID = getUserId();
 const API_BASE = window.location.origin;
 
-// DOM Elements
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
@@ -29,8 +36,6 @@ const summaryText = document.getElementById('summaryText');
 const actionItemsList = document.getElementById('actionItemsList');
 const sentimentBadge = document.getElementById('sentimentBadge');
 const historyList = document.getElementById('historyList');
-
-
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -61,13 +66,13 @@ function renderHistory(items) {
         li.className = 'history-item';
         
         const date = new Date(item.timestamp).toLocaleDateString();
-        const shortText = item.summary || item.transcript.substring(0, 30) + '...';
+        const shortText = item.summary || (item.transcript ? item.transcript.substring(0, 30) + '...' : 'Voice Note');
         
         li.innerHTML = `
-            <div class="history-title">${shortText}</div>
+            <div class="history-title">${escapeHtml(shortText)}</div>
             <div class="history-meta">
-                <span>${date}</span>
-                <span>${item.sentiment}</span>
+                <span>${escapeHtml(date)}</span>
+                <span>${escapeHtml(item.sentiment || 'Neutral')}</span>
             </div>
         `;
         
@@ -345,11 +350,19 @@ function showResult(data) {
     if (data.action_items && data.action_items.length > 0) {
         data.action_items.forEach(item => {
             const li = document.createElement('li');
-            li.innerHTML = `<i class="fa-solid fa-angle-right"></i> <span>${item}</span>`;
+            const icon = document.createElement('i');
+            icon.className = 'fa-solid fa-angle-right';
+            const span = document.createElement('span');
+            span.textContent = item;
+            li.appendChild(icon);
+            li.appendChild(document.createTextNode(' '));
+            li.appendChild(span);
             actionItemsList.appendChild(li);
         });
     } else {
-        actionItemsList.innerHTML = '<li>No action items identified.</li>';
+        const li = document.createElement('li');
+        li.textContent = 'No action items identified.';
+        actionItemsList.appendChild(li);
     }
 
     // Sentiment Badge

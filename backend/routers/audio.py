@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import User, Interaction, Feedback
 from schemas.api_schemas import ProcessAudioResponse, UsageStatus
-from services.asr_service import transcribe_audio
+from services.asr_service import transcribe_audio, _get_audio_duration
 from services.llm_service import summarize_transcript
 from core.rate_limiter import limiter
 from core.config import config
@@ -50,6 +50,9 @@ async def process_audio(
         with open(temp_path, "wb") as f:
             f.write(content)
             
+        # Determine duration
+        audio_dur = _get_audio_duration(temp_path)
+            
         # Run ML Pipeline
         raw_transcript = await transcribe_audio(temp_path)
         print(f"[ASR] Raw transcript ({len(raw_transcript)} chars): {raw_transcript}")
@@ -60,6 +63,7 @@ async def process_audio(
         # Save Interaction
         interaction = Interaction(
             user_id=user_id,
+            audio_duration_sec=round(audio_dur, 2) if audio_dur > 0 else None,
             transcript=final_transcript,
             summary=llm_result["summary"],
             action_items=json.dumps(llm_result["action_items"]),

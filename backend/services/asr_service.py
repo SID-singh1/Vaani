@@ -34,17 +34,77 @@ def load_asr_model():
         )
         print("Whisper model loaded!")
 
+import re
+import glob
+import asyncio
+
+def _clean_whisper_hallucinations(text: str) -> str:
+    """
+    Strips known Whisper outro/silence hallucinations (e.g. 'Thank you for watching',
+    'Please subscribe', etc.) that occur when audio has trailing silence or pauses.
+    """
+    if not text:
+        return ""
+    hallucination_patterns = [
+        r"(?i)\bthank\s+you\s+for\s+watching\b\.?",
+        r"(?i)\bthanks\s+for\s+watching\b\.?",
+        r"(?i)\bthank\s+you\s+very\s+much\s+for\s+watching\b\.?",
+        r"(?i)\bplease\s+(?:like\s+and\s+)?subscribe\b\.?",
+        r"(?i)\bsubscribe\s+to\s+(?:our|my|the)\s+channel\b\.?",
+        r"(?i)\bsubtitles\s+by\b.*$",
+        r"(?i)\bwatching\b\s*$",
+    ]
+    cleaned = text
+    for pat in hallucination_patterns:
+        cleaned = re.sub(pat, "", cleaned)
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+def _get_audio_duration(file_path: str) -> float:
+    """
+    Determines audio duration in seconds using ffprobe (with ffmpeg fallback).
+    """
+    try:
+        res = subprocess.run([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", file_path
+        ], capture_output=True, text=True, check=True)
+        return float(res.stdout.strip())
+    except Exception:
+        try:
+            res = subprocess.run(["ffmpeg", "-i", file_path], capture_output=True, text=True)
+            match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr)
+            if match:
+                hours, mins, secs = match.groups()
+                return int(hours) * 3600 + int(mins) * 60 + float(secs)
+        except Exception:
+            pass
+    return 0.0
+
 def _convert_to_wav(file_path: str) -> str:
     """
     Pre-convert any audio format to 16kHz mono WAV using ffmpeg.
-    This normalizes browser webm, Telegram oga/opus, and any other format
-    into clean PCM audio that Whisper processes most reliably.
-    Returns the path to the WAV file (caller must clean up).
+    Applies:
+    - -fflags +genpts: repairs presentation timestamps in forwarded/shared audio
+    - dynaudnorm: dynamic audio normalization so quiet speech is heard clearly
+    - silenceremove: strips dead trailing silence to prevent Whisper hallucinations
+    Returns path to the normalized WAV file (caller must clean up).
     """
     wav_path = file_path + ".groq.wav"
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-i", file_path,
+            ["ffmpeg", "-y", "-fflags", "+genpts", "-i", file_path,
+             "-af", "dynaudnorm=f=150:g=15,silenceremove=stop_periods=-1:stop_duration=1.5:stop_threshold=-45dB",
+             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+        )
+        return wav_path
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Fallback without audio filters if dynaudnorm is unsupported on an edge-case container
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-fflags", "+genpts", "-i", file_path,
              "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
         )
@@ -53,12 +113,32 @@ def _convert_to_wav(file_path: str) -> str:
         print(f"[ASR] ffmpeg conversion failed ({e}), will send original file to Groq")
         return None
 
+def _split_into_chunks(wav_path: str, segment_seconds: int = 40) -> list:
+    """
+    Splits long audio into ~40s segments to ensure Whisper never drops
+    subsequent speech or hits the 30-second early termination bug.
+    """
+    chunk_dir = wav_path + "_chunks"
+    os.makedirs(chunk_dir, exist_ok=True)
+    pattern = os.path.join(chunk_dir, "chunk_%03d.wav")
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-i", wav_path,
+            "-f", "segment", "-segment_time", str(segment_seconds),
+            "-c", "copy", pattern
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        chunks = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.wav")))
+        return chunks
+    except Exception as e:
+        print(f"[ASR] ffmpeg chunking failed ({e}), will transcribe as single file")
+        return []
 
 async def transcribe_audio(file_path: str) -> str:
     """
     Transcribes the given audio file.
     If USE_LOCAL_MODELS is true, uses INT8 quantized Whisper ONNX model locally.
     If false, dynamically switches to Groq's blazing fast whisper-large-v3 API.
+    Handles long audio files by intelligently chunking into ~40s parallel pieces.
     """
     if not USE_LOCAL_MODELS:
         if not GROQ_API_KEY:
@@ -66,34 +146,65 @@ async def transcribe_audio(file_path: str) -> str:
         
         print("Transcribing via Groq Whisper API...")
         
-        # Pre-convert to 16kHz WAV for maximum Whisper compatibility.
-        # This fixes: browser webm 400 errors, oga metadata issues,
-        # and reduces segment skipping in long audio.
+        # Pre-convert and normalize to 16kHz WAV
         wav_path = _convert_to_wav(file_path)
         upload_path = wav_path if wav_path else file_path
         
-        if wav_path:
-            upload_name = "audio.wav"
-            mime_type = "audio/wav"
-        else:
-            # Fallback: send original file with best-guess MIME type
-            ext = os.path.splitext(file_path)[1].lower()
-            mime_map = {
-                ".ogg": ("voice.ogg", "audio/ogg"),
-                ".oga": ("voice.ogg", "audio/ogg"),
-                ".opus": ("voice.opus", "audio/opus"),
-                ".mp3": ("audio.mp3", "audio/mpeg"),
-                ".mp4": ("video.mp4", "video/mp4"),
-                ".wav": ("audio.wav", "audio/wav"),
-                ".m4a": ("audio.m4a", "audio/m4a"),
-                ".aac": ("audio.m4a", "audio/m4a"),
-                ".webm": ("audio.webm", "audio/webm"),
-                ".flac": ("audio.flac", "audio/flac"),
-            }
-            upload_name, mime_type = mime_map.get(ext, ("voice.ogg", "audio/ogg"))
-        
         try:
-            return await _call_groq_whisper(upload_path, upload_name, mime_type)
+            duration = _get_audio_duration(upload_path)
+            print(f"[ASR] Detected audio duration: {duration:.1f}s")
+            
+            # If audio is longer than 45 seconds and we have a WAV file, chunk it
+            # This completely eliminates Whisper dropping the second half of recordings!
+            if duration > 45.0 and wav_path:
+                chunks = _split_into_chunks(wav_path, segment_seconds=40)
+                if len(chunks) > 1:
+                    print(f"[ASR] Long audio ({duration:.1f}s) split into {len(chunks)} chunks. Processing in parallel...")
+                    sem = asyncio.Semaphore(2)  # Process up to 2 chunks concurrently
+                    
+                    async def transcribe_chunk(chunk_file):
+                        async with sem:
+                            raw = await _call_groq_whisper(chunk_file, "audio.wav", "audio/wav")
+                            return _clean_whisper_hallucinations(raw)
+                    
+                    chunk_transcripts = await asyncio.gather(*(transcribe_chunk(c) for c in chunks))
+                    
+                    # Cleanup chunk files
+                    for c in chunks:
+                        if os.path.exists(c):
+                            try: os.remove(c)
+                            except: pass
+                    try:
+                        os.rmdir(wav_path + "_chunks")
+                    except: pass
+                    
+                    stitched = " ".join([t for t in chunk_transcripts if t.strip()]).strip()
+                    print(f"[ASR] Successfully stitched {len(chunks)} chunks ({len(stitched)} chars).")
+                    return stitched
+
+            # Single chunk execution for short audio (<= 45s) or fallback
+            if wav_path:
+                upload_name = "audio.wav"
+                mime_type = "audio/wav"
+            else:
+                ext = os.path.splitext(file_path)[1].lower()
+                mime_map = {
+                    ".ogg": ("voice.ogg", "audio/ogg"),
+                    ".oga": ("voice.ogg", "audio/ogg"),
+                    ".opus": ("voice.opus", "audio/opus"),
+                    ".mp3": ("audio.mp3", "audio/mpeg"),
+                    ".mp4": ("video.mp4", "video/mp4"),
+                    ".wav": ("audio.wav", "audio/wav"),
+                    ".m4a": ("audio.m4a", "audio/m4a"),
+                    ".aac": ("audio.m4a", "audio/m4a"),
+                    ".webm": ("audio.webm", "audio/webm"),
+                    ".flac": ("audio.flac", "audio/flac"),
+                }
+                upload_name, mime_type = mime_map.get(ext, ("voice.ogg", "audio/ogg"))
+            
+            raw_text = await _call_groq_whisper(upload_path, upload_name, mime_type)
+            return _clean_whisper_hallucinations(raw_text)
+            
         finally:
             # Clean up the intermediate WAV file
             if wav_path and os.path.exists(wav_path):
@@ -103,16 +214,13 @@ async def transcribe_audio(file_path: str) -> str:
 async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str, max_retries: int = 2) -> str:
     """
     Calls Groq Whisper API with retry logic for transient errors (429, 500, 503).
-    Logs the actual error body on failures for debugging.
+    Uses a neutral vocabulary guide prompt (not full sentences) so prompt text never leaks.
     """
-    import asyncio
-    
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            # Scale timeout based on file size (larger files need more time)
             file_size = os.path.getsize(upload_path)
-            timeout = max(60.0, min(180.0, file_size / (1024 * 50)))  # ~50KB/s minimum
+            timeout = max(60.0, min(180.0, file_size / (1024 * 50)))
             
             async with httpx.AsyncClient(timeout=timeout) as client:
                 with open(upload_path, "rb") as f:
@@ -123,19 +231,18 @@ async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str,
                             "model": "whisper-large-v3",
                             "temperature": "0.0",
                             "response_format": "verbose_json",
-                            "prompt": "Haan bhai, kal meeting schedule karni hai. We will discuss project updates aur deliverables."
+                            # Neutral vocabulary guide — does NOT leak complete sentences into transcripts
+                            "prompt": "Hinglish, meeting notes, project updates, tasks, review, WhatsApp Hindi."
                         },
                         files={"file": (upload_name, f, mime_type)}
                     )
                 
-                # Log error body before raising — critical for debugging 400s
                 if response.status_code != 200:
                     error_body = response.text[:500]
                     print(f"[ASR] Groq returned HTTP {response.status_code}: {error_body}")
                     
-                    # Retry on transient errors only
                     if response.status_code in (429, 500, 502, 503) and attempt < max_retries:
-                        wait_time = 2 ** attempt  # 1s, 2s
+                        wait_time = 2 ** attempt
                         print(f"[ASR] Retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})...")
                         await asyncio.sleep(wait_time)
                         continue
@@ -143,21 +250,14 @@ async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str,
                     response.raise_for_status()
                 
                 res_json = response.json()
-                
-                # Log segment metadata for debugging completeness issues
                 segments = res_json.get("segments", [])
-                duration = res_json.get("duration", 0)
-                print(f"[ASR] Groq returned {len(segments)} segments, duration={duration:.1f}s")
                 
-                # Stitch all segments together to ensure conversational pauses don't cause dropped sentences
+                # Check segments vs full text
                 if segments:
                     segment_texts = [seg.get("text", "").strip() for seg in segments if seg.get("text")]
                     stitched = " ".join(segment_texts).strip()
                     full_text = res_json.get("text", "").strip()
-                    
-                    # Use whichever version is more complete
                     result = stitched if len(stitched) >= len(full_text) else full_text
-                    print(f"[ASR] Transcript length: stitched={len(stitched)}, full_text={len(full_text)}, using={'stitched' if len(stitched) >= len(full_text) else 'full_text'}")
                     return result
                 
                 return res_json.get("text", "")
@@ -171,7 +271,7 @@ async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str,
                 continue
             raise
         except httpx.HTTPStatusError:
-            raise  # Already logged above, don't retry 400s
+            raise
         except Exception as e:
             last_error = e
             if attempt < max_retries:

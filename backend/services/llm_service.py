@@ -80,15 +80,49 @@ async def summarize_transcript(transcript: str) -> dict:
     has_devanagari = any('\u0900' <= char <= '\u097F' for char in transcript)
     
     system_prompt = (
-        "You are an intelligent bilingual assistant specialized in Indian speech, business notes, and Hinglish.\n"
-        "1. Transliterate any Hindi or Devanagari characters into natural, conversational Romanized Hinglish (Hindi written using the English alphabet, "
-        "the exact casual way Indians text on WhatsApp, e.g., 'Kal subah 10 baje team meeting karni hai aur draft share karna hai'). "
-        "CRITICAL REQUIREMENT: 'hinglish_transcript' must be a 100% COMPLETE, VERBATIM, SENTENCE-BY-SENTENCE transliteration. "
-        "DO NOT summarize, condense, omit, or drop ANY sentences or thoughts. Every single sentence from the original input must be present in sequence.\n"
-        "2. Provide an executive summary (1-2 sentences) in clean, professional English.\n"
-        "3. Extract concise actionable bullet items in clean, professional English.\n"
-        "4. Determine sentiment: 'Positive', 'Neutral', or 'Negative'."
+        "You are an expert bilingual speech and meeting intelligence assistant specializing in Hindi, Hinglish, and English.\n"
+        "Your task is to analyze the user's transcript and generate a structured JSON response.\n\n"
+        "CRITICAL LANGUAGE & OUTPUT RULES:\n"
+        "1. 'hinglish_transcript': Transliterate any Hindi or Devanagari characters into natural, casual Romanized Hinglish (Hindi written using the English alphabet, "
+        "the exact casual way Indians text on WhatsApp, e.g., 'Kal subah 10 baje team meeting karni hai aur deliverables finalize karne hain'). "
+        "Every single sentence, thought, and detail from the input must be preserved in full sequence. "
+        "NEVER summarize, omit, condense, or truncate sentences in 'hinglish_transcript'. NEVER output Devanagari script here.\n"
+        "2. 'summary': Executive summary (1-3 sentences) in 100% CLEAR, PROFESSIONAL ENGLISH. "
+        "DO NOT write the summary in Hindi or Devanagari under any circumstances.\n"
+        "3. 'action_items': Concise checklist of key decisions/tasks in 100% CLEAR, PROFESSIONAL ENGLISH. "
+        "DO NOT write action items in Hindi or Devanagari under any circumstances.\n"
+        "4. 'sentiment': Exactly one of 'Positive', 'Neutral', or 'Negative'."
     )
+    
+    def _format_result(raw_dict: dict) -> dict:
+        action_items = raw_dict.get("action_items", [])
+        if not isinstance(action_items, list):
+            action_items = [action_items] if action_items else []
+        action_items = [str(a).strip() for a in action_items if str(a).strip()]
+
+        summary = str(raw_dict.get("summary", "")).strip()
+        sentiment = str(raw_dict.get("sentiment", "Neutral")).strip().capitalize()
+        if sentiment not in ("Positive", "Neutral", "Negative"):
+            sentiment = "Neutral"
+
+        # Transcript protection:
+        # If input had no Devanagari, keep original transcript verbatim to prevent any dropped sentences!
+        if not has_devanagari:
+            final_transcript = transcript
+        else:
+            cand = str(raw_dict.get("hinglish_transcript", "")).strip()
+            # If transliteration is reasonably complete and not truncated, use it; otherwise fallback
+            if cand and len(cand) >= int(len(transcript) * 0.5):
+                final_transcript = cand
+            else:
+                final_transcript = transcript
+
+        return {
+            "transcript": final_transcript,
+            "summary": summary,
+            "action_items": action_items,
+            "sentiment": sentiment
+        }
     
     if not USE_LOCAL_MODELS:
         if not GEMINI_API_KEY:
@@ -97,14 +131,14 @@ async def summarize_transcript(transcript: str) -> dict:
         model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         user_prompt = (
             f"Transcript: {transcript}\n\n"
-            "Respond strictly with a JSON object containing keys:\n"
-            "- 'hinglish_transcript': (string) complete, verbatim transliteration into Romanized Hinglish (English alphabet) without omitting any sentences.\n"
-            "- 'summary': (string) executive summary in clean English.\n"
-            "- 'action_items': (array of strings) actionable checklist in clean English.\n"
+            "Return a valid JSON object strictly matching these keys:\n"
+            "- 'hinglish_transcript': (string) Full verbatim transcript in Romanized Hinglish (English alphabet, no Devanagari, no missing sentences).\n"
+            "- 'summary': (string) Executive summary in ENGLISH only.\n"
+            "- 'action_items': (array of strings) Actionable checklist in ENGLISH only.\n"
             "- 'sentiment': (string) 'Positive', 'Neutral', or 'Negative'."
         )
         
-        # Primary method: Direct async HTTPX REST call (bypasses gRPC quirks & SDK version deprecations)
+        # Primary method: Direct async HTTPX REST call
         try:
             print(f"Summarizing via Gemini API ({model_name})...")
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
@@ -129,22 +163,7 @@ async def summarize_transcript(transcript: str) -> dict:
                         if text.endswith("```"): text = text[:-3]
                         
                         result = json.loads(text.strip())
-                        action_items = result.get("action_items", [])
-                        if not isinstance(action_items, list):
-                            action_items = [action_items]
-                            
-                        # If transcript didn't have Devanagari in the first place, keep original transcript verbatim to avoid any dropped sentences!
-                        if not has_devanagari:
-                            hinglish_transcript = transcript
-                        else:
-                            hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
-                            
-                        return {
-                            "transcript": hinglish_transcript,
-                            "summary": result.get("summary", ""),
-                            "action_items": action_items,
-                            "sentiment": result.get("sentiment", "Neutral")
-                        }
+                        return _format_result(result)
                     else:
                         print(f"Gemini API returned no candidates: {data}")
                 else:
@@ -173,20 +192,7 @@ async def summarize_transcript(transcript: str) -> dict:
                 if text.endswith("```"): text = text[:-3]
                 
                 result = json.loads(text.strip())
-                action_items = result.get("action_items", [])
-                if not isinstance(action_items, list):
-                    action_items = [action_items]
-                    
-                if not has_devanagari:
-                    hinglish_transcript = transcript
-                else:
-                    hinglish_transcript = result.get("hinglish_transcript", "").strip() or transcript
-                return {
-                    "transcript": hinglish_transcript,
-                    "summary": result.get("summary", ""),
-                    "action_items": action_items,
-                    "sentiment": result.get("sentiment", "Neutral")
-                }
+                return _format_result(result)
             except Exception as sdk_err:
                 raise HTTPException(status_code=500, detail=f"Gemini LLM summarization failed: {str(sdk_err)}")
         else:

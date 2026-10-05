@@ -1,3 +1,5 @@
+import os
+import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
@@ -6,8 +8,6 @@ from routers import audio, history
 from core.rate_limiter import limiter
 from core.config import config
 from db.database import engine, Base
-
-import logging
 
 # Configure logging
 logging.basicConfig(
@@ -29,14 +29,33 @@ app = FastAPI(title=config.PROJECT_NAME)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # For dev. In prod, lock this down.
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS Configuration
+# Set ALLOWED_ORIGINS in Render env vars (e.g. "https://vaani.onrender.com,https://yourdomain.com")
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    origins = [orig.strip() for orig in allowed_origins_env.split(",") if orig.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Default: allow Render domains and local development
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ],
+        allow_origin_regex=r"https://.*\.onrender\.com",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

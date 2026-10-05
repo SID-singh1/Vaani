@@ -2,6 +2,13 @@ let currentDays = 7;
 let timelineChartInstance = null;
 let sentimentChartInstance = null;
 
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
     setupEventListeners();
@@ -242,10 +249,10 @@ function renderRecentTable(interactions) {
 
         rowsHtml += `
             <tr>
-                <td style="white-space: nowrap; font-size: 0.85rem; color: rgba(255,255,255,0.6);">${item.timestamp}</td>
-                <td><code style="background: rgba(255,255,255,0.06); padding: 3px 6px; border-radius: 4px; font-size: 0.8rem;">${item.user_id}</code></td>
-                <td>${summaryText}</td>
-                <td><span class="badge ${sentimentClass}">${item.sentiment}</span></td>
+                <td style="white-space: nowrap; font-size: 0.85rem; color: rgba(255,255,255,0.6);">${escapeHtml(item.timestamp)}</td>
+                <td><code style="background: rgba(255,255,255,0.06); padding: 3px 6px; border-radius: 4px; font-size: 0.8rem;">${escapeHtml(item.user_id)}</code></td>
+                <td>${escapeHtml(summaryText)}</td>
+                <td><span class="badge ${sentimentClass}">${escapeHtml(item.sentiment || 'Neutral')}</span></td>
                 <td>${feedbackBadge}</td>
             </tr>
         `;
