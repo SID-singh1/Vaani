@@ -1,4 +1,5 @@
 import os
+import asyncio
 import subprocess
 import atexit
 import httpx
@@ -138,10 +139,10 @@ async def summarize_transcript(transcript: str) -> dict:
             "- 'sentiment': (string) 'Positive', 'Neutral', or 'Negative'."
         )
         
-        # Primary method: Direct async HTTPX REST call
-        try:
-            print(f"Summarizing via Gemini API ({model_name})...")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        # Primary method: Direct async HTTPX REST call with retry & fallback
+        model_candidates = list(dict.fromkeys([model_name, "gemini-1.5-flash", "gemini-2.0-flash"]))
+        for candidate_model in model_candidates:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate_model}:generateContent?key={GEMINI_API_KEY}"
             payload = {
                 "system_instruction": {"parts": [{"text": system_prompt}]},
                 "contents": [{"parts": [{"text": user_prompt}]}],
@@ -151,25 +152,31 @@ async def summarize_transcript(transcript: str) -> dict:
                     "maxOutputTokens": 8192
                 }
             }
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, json=payload)
-                if response.status_code == 200:
-                    data = response.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-                        if text.startswith("```json"): text = text[7:]
-                        elif text.startswith("```"): text = text[3:]
-                        if text.endswith("```"): text = text[:-3]
-                        
-                        result = json.loads(text.strip())
-                        return _format_result(result)
-                    else:
-                        print(f"Gemini API returned no candidates: {data}")
-                else:
-                    print(f"Gemini REST returned HTTP {response.status_code}: {response.text}")
-        except Exception as rest_err:
-            print(f"Gemini REST call failed ({rest_err}), trying Google GenerativeAI SDK fallback...")
+            for attempt in range(2):
+                try:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        response = await client.post(url, json=payload)
+                        if response.status_code == 200:
+                            data = response.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                                if text.startswith("```json"): text = text[7:]
+                                elif text.startswith("```"): text = text[3:]
+                                if text.endswith("```"): text = text[:-3]
+                                
+                                result = json.loads(text.strip())
+                                return _format_result(result)
+                        elif response.status_code in (429, 500, 502, 503):
+                            print(f"[LLM] Gemini ({candidate_model}) returned HTTP {response.status_code}, retrying...")
+                            await asyncio.sleep(2)
+                            continue
+                        else:
+                            print(f"[LLM] Gemini ({candidate_model}) returned HTTP {response.status_code}: {response.text[:200]}")
+                            break
+                except Exception as rest_err:
+                    print(f"[LLM] Gemini request error on {candidate_model} ({rest_err}), retrying...")
+                    await asyncio.sleep(1)
 
         # Fallback method: Google GenerativeAI SDK
         if genai is not None:
