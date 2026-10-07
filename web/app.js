@@ -341,6 +341,12 @@ function showResult(data) {
         }
     }
 
+    // Ensure transcript accordion is collapsed by default for clean overview
+    const transcriptAccordion = document.getElementById('transcriptAccordion');
+    if (transcriptAccordion) {
+        transcriptAccordion.open = false;
+    }
+
     // Populate Data
     transcriptText.textContent = data.transcript || "No transcript generated.";
     summaryText.textContent = data.summary || "No summary generated.";

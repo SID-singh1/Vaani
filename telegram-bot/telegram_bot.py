@@ -210,55 +210,51 @@ async def process_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         summary = result.get("summary", "")
         action_items = result.get("action_items", [])
         sentiment = result.get("sentiment", "Neutral")
+        interaction_id = result.get("interaction_id", "unknown")
         
-        # Build pretty message
-        reply = f"📝 *Transcription:*\n_{transcription}_\n\n"
-        reply += f"🧠 *AI Summary ({sentiment}):*\n{summary}\n\n"
+        # Cache transcript in bot memory for instant retrieval on demand
+        if interaction_id:
+            context.bot_data[f"transcript_{interaction_id}"] = transcription
+
+        # Build clean summary-first message
+        reply = f"🧠 *AI Summary ({sentiment}):*\n{summary}\n\n"
         
         if action_items:
             reply += "✅ *Action Items:*\n"
             for item in action_items:
                 reply += f"• {item}\n"
+        else:
+            reply += "✅ *Action Items:*\n• No immediate action items.\n"
                 
-        # Send the final response and delete the "processing" message
+        # Send the response with [View Full Transcript] toggle and feedback buttons
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         
         keyboard = [
             [
-                InlineKeyboardButton("👍 Accurate", callback_data=f"rating_thumbs_up_{result.get('interaction_id', 'unknown')}"),
-                InlineKeyboardButton("👎 Inaccurate", callback_data=f"rating_thumbs_down_{result.get('interaction_id', 'unknown')}")
+                InlineKeyboardButton("📝 View Full Transcript", callback_data=f"view_transcript_{interaction_id}")
+            ],
+            [
+                InlineKeyboardButton("👍 Accurate", callback_data=f"rating_thumbs_up_{interaction_id}"),
+                InlineKeyboardButton("👎 Inaccurate", callback_data=f"rating_thumbs_down_{interaction_id}")
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Telegram has a 4096-char limit per message. Split if needed.
-        TELEGRAM_MAX_LEN = 4000  # Leave some margin for safety
-        
+        TELEGRAM_MAX_LEN = 4000
         if len(reply) <= TELEGRAM_MAX_LEN:
-            await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
-        else:
-            # Split: send transcript first, then summary + action items with feedback buttons
-            transcript_msg = f"📝 *Transcription:*\n_{transcription}_"
-            summary_msg = f"🧠 *AI Summary ({sentiment}):*\n{summary}\n\n"
-            if action_items:
-                summary_msg += "✅ *Action Items:*\n"
-                for item in action_items:
-                    summary_msg += f"• {item}\n"
-            
-            # Send transcript in chunks if it's very long
-            for i in range(0, len(transcript_msg), TELEGRAM_MAX_LEN):
-                chunk = transcript_msg[i:i + TELEGRAM_MAX_LEN]
-                try:
-                    await update.message.reply_text(chunk, parse_mode="Markdown")
-                except Exception:
-                    # If Markdown parsing fails on a chunk boundary, send as plain text
-                    await update.message.reply_text(chunk)
-            
-            # Send summary with feedback buttons
             try:
-                await update.message.reply_text(summary_msg, parse_mode="Markdown", reply_markup=reply_markup)
+                await update.message.reply_text(reply, parse_mode="Markdown", reply_markup=reply_markup)
             except Exception:
-                await update.message.reply_text(summary_msg, reply_markup=reply_markup)
+                await update.message.reply_text(reply, reply_markup=reply_markup)
+        else:
+            for i in range(0, len(reply), TELEGRAM_MAX_LEN):
+                chunk = reply[i:i + TELEGRAM_MAX_LEN]
+                is_last = (i + TELEGRAM_MAX_LEN >= len(reply))
+                markup = reply_markup if is_last else None
+                try:
+                    await update.message.reply_text(chunk, parse_mode="Markdown", reply_markup=markup)
+                except Exception:
+                    await update.message.reply_text(chunk, reply_markup=markup)
         
         await status_message.delete()
         
@@ -441,10 +437,55 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             original_text = query.message.text
             thank_you = "✅ Thanks for your feedback!" if rating == "thumbs_up" else "❌ Thanks for your feedback. We will improve!"
-            await query.edit_message_text(f"{original_text}\n\n_{thank_you}_", parse_mode="Markdown")
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keep_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📝 View Full Transcript", callback_data=f"view_transcript_{interaction_id}")]
+            ])
+            try:
+                await query.edit_message_text(f"{original_text}\n\n_{thank_you}_", parse_mode="Markdown", reply_markup=keep_markup)
+            except Exception:
+                await query.edit_message_text(f"{original_text}\n\n{thank_you}", reply_markup=keep_markup)
         except Exception as e:
             logger.error(f"Error submitting rating: {e}")
             await query.edit_message_text("❌ Failed to submit rating.")
+
+    elif data.startswith("view_transcript_"):
+        interaction_id = data.replace("view_transcript_", "", 1)
+        transcript = context.bot_data.get(f"transcript_{interaction_id}")
+        
+        # Fallback: fetch from backend if bot was restarted
+        if not transcript:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get(
+                        f"{config.FASTAPI_BACKEND_URL}/interaction/{interaction_id}?secret={config.INTERNAL_API_SECRET}",
+                        headers=headers
+                    )
+                    if res.is_success:
+                        transcript = res.json().get("transcript", "")
+            except Exception as e:
+                logger.error(f"Error fetching transcript for {interaction_id}: {e}")
+
+        if not transcript:
+            await query.answer("Transcript not available.", show_alert=True)
+            return
+
+        header = "📝 *Full Verbatim Transcript:*\n\n"
+        max_chunk = 3800
+        if len(transcript) <= max_chunk:
+            try:
+                await query.message.reply_text(f"{header}_{transcript}_", parse_mode="Markdown")
+            except Exception:
+                await query.message.reply_text(f"{header}{transcript}")
+        else:
+            for i in range(0, len(transcript), max_chunk):
+                chunk = transcript[i:i + max_chunk]
+                prefix = header if i == 0 else ""
+                try:
+                    await query.message.reply_text(f"{prefix}_{chunk}_", parse_mode="Markdown")
+                except Exception:
+                    await query.message.reply_text(f"{prefix}{chunk}")
+
 
     elif data == "delete_confirm_selected":
         pending_ids = context.user_data.get("pending_delete_ids", [])

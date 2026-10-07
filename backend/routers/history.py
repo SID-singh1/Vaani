@@ -59,3 +59,27 @@ def delete_history(user_id: str, request: Request, payload: Optional[DeleteHisto
     deleted_count = query.delete(synchronize_session=False)
     db.commit()
     return {"status": "success", "deleted_count": deleted_count}
+
+@router.get("/interaction/{interaction_id}")
+def get_single_interaction(interaction_id: str, request: Request, db: Session = Depends(get_db)):
+    interaction = db.query(Interaction).filter(Interaction.id == interaction_id).first()
+    if not interaction:
+        raise HTTPException(status_code=404, detail="Interaction not found")
+    
+    # If it belongs to a Telegram user, check secret if accessed externally
+    if interaction.user_id and interaction.user_id.startswith("tg_"):
+        auth_header = request.headers.get("X-Internal-Secret", "")
+        auth_query = request.query_params.get("secret", "")
+        if auth_header != config.INTERNAL_API_SECRET and auth_query != config.INTERNAL_API_SECRET:
+            raise HTTPException(status_code=403, detail="Unauthorized")
+            
+    action_items = json.loads(interaction.action_items) if interaction.action_items else []
+    return {
+        "id": interaction.id,
+        "transcript": interaction.transcript,
+        "summary": interaction.summary,
+        "action_items": action_items,
+        "sentiment": interaction.sentiment,
+        "timestamp": interaction.timestamp.isoformat() if interaction.timestamp else None
+    }
+

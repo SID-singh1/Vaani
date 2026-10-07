@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 import subprocess
 import atexit
@@ -117,6 +118,22 @@ async def summarize_transcript(transcript: str) -> dict:
                 final_transcript = cand
             else:
                 final_transcript = transcript
+
+        # Collapsing any autoregressive repetition loops in transcript
+        for _ in range(3):
+            final_transcript = re.sub(
+                r'\b([A-Za-z\u0900-\u097F]+(?:[,\s]+[A-Za-z\u0900-\u097F]+){1,8})(?:[,\s]+\1\b)+',
+                r'\1',
+                final_transcript,
+                flags=re.IGNORECASE
+            )
+        final_transcript = re.sub(
+            r'\b([A-Za-z\u0900-\u097F]+)(?:[,\s]+\1\b){2,}',
+            r'\1',
+            final_transcript,
+            flags=re.IGNORECASE
+        )
+        final_transcript = re.sub(r'\s+', ' ', final_transcript).strip()
 
         return {
             "transcript": final_transcript,

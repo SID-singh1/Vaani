@@ -94,16 +94,6 @@
                     </div>
 
                     <div class="results-grid">
-                        <div class="result-card glass-panel transcript-card">
-                            <div class="card-header">
-                                <i class="fa-solid fa-align-left icon-gradient"></i>
-                                <h3>Transcription</h3>
-                            </div>
-                            <div class="card-body">
-                                <p id="transcriptText">Transcript will appear here...</p>
-                            </div>
-                        </div>
-
                         <div class="result-card glass-panel summary-card">
                             <div class="card-header">
                                 <i class="fa-solid fa-bolt icon-gradient"></i>
@@ -125,6 +115,19 @@
                                 </ul>
                             </div>
                         </div>
+
+                        <details class="transcript-accordion glass-panel" id="transcriptAccordion">
+                            <summary class="accordion-header">
+                                <div class="accordion-title">
+                                    <i class="fa-solid fa-align-left icon-gradient"></i>
+                                    <span>View Full Transcript</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-down accordion-icon"></i>
+                            </summary>
+                            <div class="accordion-body">
+                                <p id="transcriptText">Transcript will appear here...</p>
+                            </div>
+                        </details>
                     </div>
                     
                     <div class="actions-row">

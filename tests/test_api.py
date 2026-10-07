@@ -63,3 +63,42 @@ def test_history():
     assert "history" in data
     assert len(data["history"]) >= 1
     assert data["history"][0]["transcript"] is not None
+
+def test_get_single_interaction():
+    # First get an existing interaction id from history
+    hist_res = client.get("/history/test_user_123")
+    assert hist_res.status_code == 200
+    interaction_id = hist_res.json()["history"][0]["id"]
+
+    # Test valid fetch
+    res = client.get(f"/interaction/{interaction_id}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == interaction_id
+    assert "transcript" in data
+    assert "summary" in data
+    assert "action_items" in data
+
+    # Test not found
+    not_found = client.get("/interaction/non_existent_id_999")
+    assert not_found.status_code == 404
+
+def test_hallucination_and_repetition_cleaner():
+    from services.asr_service import _clean_whisper_hallucinations
+
+    # 1. Strips YouTube/Whisper outro hallucinations
+    assert _clean_whisper_hallucinations("Main kal aunga. Thank you for watching!") == "Main kal aunga."
+
+    # 2. Collapses multi-word autoregressive loops
+    loop_text = "apne apne avaram aur apne apne avaram aur tip ko"
+    cleaned = _clean_whisper_hallucinations(loop_text)
+    assert cleaned == "apne apne avaram aur tip ko"
+
+    # 3. Preserves natural Hindi 2-word reduplication
+    reduplication = "kabhi kabhi hum dheere dheere chalte hain"
+    assert _clean_whisper_hallucinations(reduplication) == "kabhi kabhi hum dheere dheere chalte hain"
+
+    # 4. Collapses 3+ repeated single words
+    triple_repeat = "audio note audio note audio note"
+    assert _clean_whisper_hallucinations(triple_repeat) == "audio note"
+

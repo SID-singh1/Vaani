@@ -41,22 +41,42 @@ import asyncio
 def _clean_whisper_hallucinations(text: str) -> str:
     """
     Strips known Whisper outro/silence hallucinations (e.g. 'Thank you for watching',
-    'Please subscribe', etc.) that occur when audio has trailing silence or pauses.
+    'Please subscribe', etc.) that occur when audio has trailing silence or pauses,
+    and collapses autoregressive repetition loops (e.g., repeated phrases or 3+ repeated words)
+    while preserving natural Hindi 2-word reduplication ('kabhi kabhi', 'dheere dheere').
     """
     if not text:
         return ""
     hallucination_patterns = [
-        r"(?i)\bthank\s+you\s+for\s+watching\b\.?",
-        r"(?i)\bthanks\s+for\s+watching\b\.?",
-        r"(?i)\bthank\s+you\s+very\s+much\s+for\s+watching\b\.?",
-        r"(?i)\bplease\s+(?:like\s+and\s+)?subscribe\b\.?",
-        r"(?i)\bsubscribe\s+to\s+(?:our|my|the)\s+channel\b\.?",
+        r"(?i)\bthank\s+you\s+for\s+watching\b[.!?,]*",
+        r"(?i)\bthanks\s+for\s+watching\b[.!?,]*",
+        r"(?i)\bthank\s+you\s+very\s+much\s+for\s+watching\b[.!?,]*",
+        r"(?i)\bplease\s+(?:like\s+and\s+)?subscribe\b[.!?,]*",
+        r"(?i)\bsubscribe\s+to\s+(?:our|my|the)\s+channel\b[.!?,]*",
         r"(?i)\bsubtitles\s+by\b.*$",
         r"(?i)\bwatching\b\s*$",
     ]
     cleaned = text
     for pat in hallucination_patterns:
         cleaned = re.sub(pat, "", cleaned)
+
+    # Autoregressive repetition loop deduplication
+    # 1. Multi-word phrase repeats (2 to 8 words repeated consecutively)
+    for _ in range(3):
+        cleaned = re.sub(
+            r'\b([A-Za-z\u0900-\u097F]+(?:[,\s]+[A-Za-z\u0900-\u097F]+){1,8})(?:[,\s]+\1\b)+',
+            r'\1',
+            cleaned,
+            flags=re.IGNORECASE
+        )
+    # 2. Single word repeated 3 or more times (preserves Hindi 2-word reduplication: 'kabhi kabhi')
+    cleaned = re.sub(
+        r'\b([A-Za-z\u0900-\u097F]+)(?:[,\s]+\1\b){2,}',
+        r'\1',
+        cleaned,
+        flags=re.IGNORECASE
+    )
+
     return re.sub(r'\s+', ' ', cleaned).strip()
 
 def _get_audio_duration(file_path: str) -> float:
