@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaani · Privacy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="doc-page">
+    <main class="doc">
+        <a class="doc-back" href="/">← Back to Vaani</a>
+        <h1>Privacy</h1>
+        <p class="doc-lead">Vaani turns voice notes into summaries and action items. This page explains exactly what
+            happens to what you send. Last updated: October 2026.</p>
+
+        <h2>What we store</h2>
+        <ul>
+            <li><strong>Audio:</strong> kept only while it's being processed, then deleted. We never store your recordings.</li>
+            <li><strong>Transcripts, summaries and action items:</strong> stored so you can see your history. You can delete
+                any note, or all of them, at any time (web: the trash icon; Telegram: <code>/delete</code>; WhatsApp: reply
+                <code>delete all</code>). Deletion is permanent.</li>
+            <li><strong>Who you are:</strong> on the web, a random ID kept in your browser (no account, no email). On Telegram,
+                your numeric Telegram user ID. On WhatsApp, a one-way keyed hash of your phone number. The number itself is
+                never stored.</li>
+            <li><strong>Ratings and feedback</strong> you choose to send.</li>
+        </ul>
+
+        <h2>Who processes your audio</h2>
+        <p><strong>Fast mode</strong> (the default on the hosted service) sends audio to
+            <a href="https://groq.com/privacy-policy/" rel="noopener">Groq</a> for speech-to-text, and the transcript to
+            <a href="https://ai.google.dev/gemini-api/terms" rel="noopener">Google's Gemini API</a> for the summary (with
+            Groq as a backup when Gemini is unavailable). The hosted service uses Gemini's free tier. Under Google's terms
+            for unpaid use, Google may use submitted content to improve its products, and human reviewers may read it.
+            <strong>Please don't send anything you wouldn't want a third party to see.</strong></p>
+        <p><strong>Private mode</strong>, where a server offers it, runs Whisper and a local language model on that server's
+            own CPU. Nothing is sent to any AI company. It's slower. Vaani is open source, so you can
+            <a href="https://github.com/SID-singh1/Vaani" rel="noopener">self-host it</a> and keep everything on your own
+            machine.</p>
+
+        <h2>What we don't do</h2>
+        <ul>
+            <li>No ads, no selling or sharing your data, and no training models on your notes.</li>
+            <li>No tracking cookies or analytics scripts on this site.</li>
+        </ul>
+
+        <h2>Usage numbers</h2>
+        <p>The developer sees aggregate statistics (number of notes, active users, processing times) and masked IDs in an
+            admin dashboard, to keep the service working and improve it.</p>
+
+        <h2>Contact</h2>
+        <p>Questions or deletion requests: open an issue at
+            <a href="https://github.com/SID-singh1/Vaani/issues" rel="noopener">github.com/SID-singh1/Vaani</a>, or use
+            the feedback command in the bot.</p>
+    </main>
+</body>
+</html>

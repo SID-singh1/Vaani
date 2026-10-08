@@ -1,16 +1,18 @@
+import argparse
+import asyncio
+import json
 import os
 import sys
 import time
-import json
-import argparse
-import asyncio
 from datetime import datetime
+
 import dotenv
 import jiwer
 
-# Ensure project root is in sys.path
+# Ensure project root and the backend package are importable
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
 
 if sys.platform == "win32":
     try:
@@ -20,8 +22,40 @@ if sys.platform == "win32":
 
 dotenv.load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-from backend.services.asr_service import transcribe_audio, _get_audio_duration
-from backend.services.llm_service import summarize_transcript
+from pathlib import Path
+
+import httpx
+
+from vaani.analysis import NoteAnalyzer
+from vaani.audio import probe_duration
+from vaani.config import load_settings
+from vaani.engines.registry import build_registry
+from vaani.text.cleanup import clean_transcript
+
+_engine = None
+
+
+def _get_engine():
+    global _engine
+    if _engine is None:
+        settings = load_settings()
+        _engine = build_registry(settings, httpx.AsyncClient(timeout=120)).get("cloud")
+    return _engine
+
+
+async def transcribe_audio(path: str) -> str:
+    result = await _get_engine().asr.transcribe(Path(path))
+    return clean_transcript(result.text)
+
+
+async def summarize_transcript(transcript: str) -> dict:
+    outcome = await NoteAnalyzer(_get_engine().llms, "llm").process(transcript)
+    return {
+        "transcript": outcome.transcript,
+        "summary": outcome.analysis.summary,
+        "action_items": [item.task for item in outcome.analysis.action_items],
+        "sentiment": outcome.analysis.sentiment,
+    }
 
 MANIFEST_PATH = os.path.join(BASE_DIR, "evaluation", "test_manifest.json")
 REPORT_MD_PATH = os.path.join(BASE_DIR, "evaluation", "benchmark_report.md")
@@ -45,7 +79,7 @@ async def evaluate_single_test(test_item: dict) -> dict:
     audio_path = os.path.join(BASE_DIR, test_item["audio_file"])
     reference = test_item["reference_transcript"]
     expected_actions = test_item.get("expected_actions", [])
-    
+
     if not os.path.exists(audio_path):
         return {
             "id": test_id,
@@ -55,30 +89,30 @@ async def evaluate_single_test(test_item: dict) -> dict:
             "skipped": True
         }
 
-    duration = _get_audio_duration(audio_path)
-    
+    duration = await probe_duration(Path(audio_path)) or 0.0
+
     # 1. Measure ASR Latency & Output
     t0 = time.time()
     raw_transcript = await transcribe_audio(audio_path)
     asr_latency = time.time() - t0
-    
+
     # 2. Run LLM Summarization & Transliteration
     t1 = time.time()
     llm_result = await summarize_transcript(raw_transcript)
     llm_latency = time.time() - t1
-    
+
     hyp_transcript = llm_result.get("transcript") or raw_transcript
     summary = llm_result.get("summary", "")
     actions = llm_result.get("action_items", [])
     sentiment = llm_result.get("sentiment", "Neutral")
-    
+
     # 3. Calculate Speech Accuracy (WER & CER)
     norm_ref = normalize_text(reference)
     norm_hyp = normalize_text(hyp_transcript)
-    
+
     wer = jiwer.wer(norm_ref, norm_hyp)
     cer = jiwer.cer(norm_ref, norm_hyp)
-    
+
     # 4. Action Item Recall (simple keyword overlap check)
     actions_found = 0
     actions_combined = " ".join(actions).lower()
@@ -87,7 +121,7 @@ async def evaluate_single_test(test_item: dict) -> dict:
         keywords = [w.lower() for w in exp.split() if len(w) > 3]
         if any(kw in actions_combined for kw in keywords):
             actions_found += 1
-            
+
     action_recall = (actions_found / len(expected_actions)) if expected_actions else 1.0
 
     return {
@@ -120,7 +154,7 @@ async def run_suite(limit: int = None, target_id: str = None):
         print(f"❌ Error: Test manifest not found at {MANIFEST_PATH}")
         return
 
-    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+    with open(MANIFEST_PATH, encoding="utf-8") as f:
         tests = json.load(f)
 
     if target_id:
@@ -132,7 +166,7 @@ async def run_suite(limit: int = None, target_id: str = None):
         tests = tests[:limit]
 
     print(f"Running {len(tests)} evaluation tests...\n")
-    
+
     results = []
     for idx, t in enumerate(tests, 1):
         print(f"[{idx}/{len(tests)}] Evaluating: {t['title']} ({t['id']})...", end=" ", flush=True)
@@ -207,7 +241,7 @@ async def run_suite(limit: int = None, target_id: str = None):
             f.write(f"| {r['id']} | {r['category']} | {r['duration_sec']} | {r['asr_latency_sec']} | {r['wer']}% | {r['cer']}% | {act_str} |\n")
         f.write("\n")
 
-    print(f"\n📁 Report saved to:")
+    print("\n📁 Report saved to:")
     print(f"  • {REPORT_MD_PATH}")
     print(f"  • {REPORT_JSON_PATH}\n")
 

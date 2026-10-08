@@ -1,12 +1,11 @@
-fastapi
-uvicorn
-python-multipart
-slowapi
-sqlalchemy
-pydantic
-
-httpx
-google-generativeai
-python-dotenv
-
-psycopg2-binary
+# Runtime dependencies for the API + Telegram/WhatsApp channels (cloud engine).
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+python-multipart>=0.0.9
+pydantic>=2.6,<3
+sqlalchemy>=2.0,<2.1
+alembic>=1.13,<2
+psycopg2-binary>=2.9,<3
+httpx>=0.27,<1.0
+python-telegram-bot>=22.0,<23
+python-dotenv>=1.0,<2
