@@ -46,3 +46,6 @@ nextstage.txt
 scratch/
 *.wav
 *.mp3
+# llama.cpp source checkout and prebuilt binaries (fetched by ml/export scripts)
+ml/llama.cpp/
+ml/mlruns/
