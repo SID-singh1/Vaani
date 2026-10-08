@@ -6,13 +6,14 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..context import AppContext
 from ..db.models import Feedback, Interaction, NoteStatus, utcnow
 from .deps import get_ctx, require_admin
+from .ratelimit import client_ip
 
 router = APIRouter(prefix="/api/v1/admin", dependencies=[Depends(require_admin)])
 
@@ -159,6 +160,19 @@ def compute_analytics(session: Session, days: int, excluded: list[str]) -> dict:
             }
             for f in feedback
         ],
+    }
+
+
+@router.get("/request-info")
+async def request_info(request: Request, ctx: AppContext = Depends(get_ctx)):
+    """Shows how this request reached the app, to set TRUSTED_PROXY_HOPS correctly after deploying:
+    send a request with a fake `X-Forwarded-For: 1.2.3.4` and check derived_client_ip is your real IP."""
+    hops = ctx.settings.trusted_proxy_hops
+    return {
+        "x_forwarded_for": request.headers.get("x-forwarded-for"),
+        "socket_peer": request.client.host if request.client else None,
+        "trusted_proxy_hops": hops,
+        "derived_client_ip": client_ip(request, hops),
     }
 
 

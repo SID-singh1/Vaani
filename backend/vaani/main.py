@@ -232,6 +232,7 @@ def create_app(settings: Settings | None = None, registry_factory: RegistryFacto
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():
         return FileResponse(WEB_DIR / "favicon.svg", media_type="image/svg+xml")
+
     return app
 
 

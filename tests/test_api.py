@@ -224,3 +224,11 @@ def test_admin_analytics(client):
 def test_admin_analytics_without_ratings_reports_none(client):
     data = client.get("/api/v1/admin/analytics", headers={"x-admin-key": "admin-key"}).json()
     assert data["ratings"]["accuracy_pct"] is None  # not a fake 100%
+
+
+def test_request_info_helps_configure_proxy_hops(client):
+    headers = {"x-admin-key": "admin-key", "x-forwarded-for": "1.2.3.4, 203.0.113.7"}
+    info = client.get("/api/v1/admin/request-info", headers=headers).json()
+    assert info["x_forwarded_for"] == "1.2.3.4, 203.0.113.7"
+    assert info["trusted_proxy_hops"] == 0 and info["derived_client_ip"] == "testclient"
+    assert client.get("/api/v1/admin/request-info").status_code == 401

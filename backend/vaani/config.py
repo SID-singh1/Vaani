@@ -81,7 +81,7 @@ class Settings:
     global_daily_cloud_limit: int = 300
     unlimited_user_ids: list[str] = field(default_factory=list)
     ip_rate_limit: str = "30/minute"
-    session_rate_limit: str = "10/minute"
+    session_rate_limit: str = "60/minute"
     trusted_proxy_hops: int = 0  # 1 behind Render/most PaaS load balancers
 
     # Telegram
@@ -191,7 +191,7 @@ def load_settings() -> Settings:
         global_daily_cloud_limit=_int("GLOBAL_DAILY_CLOUD_LIMIT", 300),
         unlimited_user_ids=_list("UNLIMITED_USER_IDS"),
         ip_rate_limit=_str("IP_RATE_LIMIT", "30/minute"),
-        session_rate_limit=_str("SESSION_RATE_LIMIT", "10/minute"),
+        session_rate_limit=_str("SESSION_RATE_LIMIT", "60/minute"),
         trusted_proxy_hops=_int("TRUSTED_PROXY_HOPS", 1 if env == "production" else 0),
         telegram_bot_token=telegram_token,
         telegram_mode=telegram_mode,
