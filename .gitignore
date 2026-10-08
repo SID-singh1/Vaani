@@ -49,3 +49,7 @@ scratch/
 # llama.cpp source checkout and prebuilt binaries (fetched by ml/export scripts)
 ml/llama.cpp/
 ml/mlruns/
+
+# Evaluation caches (derived data; re-creatable)
+evaluation/.cache/
+dev.db

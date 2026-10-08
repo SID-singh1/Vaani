@@ -1,254 +1,218 @@
+"""Evaluate Vaani on the clips in evaluation/test_manifest.json.
+
+    python scripts/run_eval_suite.py                          # cloud engine, all clips, LLM judge on
+    python scripts/run_eval_suite.py --source human           # real recordings only
+    python scripts/run_eval_suite.py --llm gemini:gemini-3.5-flash-lite   # compare another LLM
+    python scripts/run_eval_suite.py --engine private --llm-model models/phi-3-mini-q4_k_m.gguf
+    python scripts/run_eval_suite.py --report-only            # rebuild the report from saved runs
+
+Speech-to-text output is cached per clip and model (evaluation/.cache/asr), so comparing
+LLMs doesn't re-spend speech quota; pass --fresh-asr to re-transcribe (and re-time) audio.
+Each run is saved to evaluation/results/<config>.json and the Markdown report is rebuilt
+from every saved run.
+"""
+
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
 import os
+import re
+import subprocess
 import sys
 import time
-from datetime import datetime
-
-import dotenv
-import jiwer
-
-# Ensure project root and the backend package are importable
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
-
-if sys.platform == "win32":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-
-dotenv.load_dotenv(os.path.join(BASE_DIR, ".env"))
-
+from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "backend"), str(ROOT)]
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
 
-from vaani.analysis import NoteAnalyzer
-from vaani.audio import probe_duration
-from vaani.config import load_settings
-from vaani.engines.registry import build_registry
-from vaani.text.cleanup import clean_transcript
+import httpx  # noqa: E402
 
-_engine = None
+from evaluation.judge import Judge  # noqa: E402
+from evaluation.metrics import basic_normalize, cer, hinglish_normalize, wer  # noqa: E402
+from evaluation.report import RESULTS_DIR, write_report  # noqa: E402
+from vaani.analysis import NoteAnalyzer  # noqa: E402
+from vaani.audio import probe_duration  # noqa: E402
+from vaani.config import load_settings  # noqa: E402
+from vaani.engines.gemini import GeminiClient  # noqa: E402
+from vaani.engines.openai_compat import ChatCompletionsClient  # noqa: E402
+from vaani.engines.registry import GROQ_OPENAI_BASE, build_registry  # noqa: E402
+from vaani.text.cleanup import clean_transcript  # noqa: E402
 
-
-def _get_engine():
-    global _engine
-    if _engine is None:
-        settings = load_settings()
-        _engine = build_registry(settings, httpx.AsyncClient(timeout=120)).get("cloud")
-    return _engine
-
-
-async def transcribe_audio(path: str) -> str:
-    result = await _get_engine().asr.transcribe(Path(path))
-    return clean_transcript(result.text)
+MANIFEST = ROOT / "evaluation" / "test_manifest.json"
+ASR_CACHE = ROOT / "evaluation" / ".cache" / "asr"
 
 
-async def summarize_transcript(transcript: str) -> dict:
-    outcome = await NoteAnalyzer(_get_engine().llms, "llm").process(transcript)
-    return {
-        "transcript": outcome.transcript,
+def slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def make_llm(spec: str, settings, http):
+    provider, _, model = spec.partition(":")
+    if provider == "gemini":
+        return GeminiClient(settings.gemini_api_key, model, http)
+    if provider == "groq":
+        extra = {"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {}
+        return ChatCompletionsClient(name=f"groq:{model}", base_url=GROQ_OPENAI_BASE, model=model, http=http,
+                                     api_key=settings.groq_api_key, extra_body=extra)
+    raise SystemExit(f"unknown LLM spec {spec!r}; use gemini:<model> or groq:<model>")
+
+
+def git_commit() -> str:
+    try:
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+                              cwd=ROOT).stdout.strip()
+    except OSError:
+        return "unknown"
+
+
+async def transcribe_cached(engine, clip_id: str, path: Path, fresh: bool) -> tuple[str, float]:
+    cache = ASR_CACHE / slug(engine.asr.name) / f"{clip_id}.json"
+    if cache.exists() and not fresh:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        return data["text"], data["seconds"]
+    started = time.perf_counter()
+    result = await engine.asr.transcribe(path)
+    seconds = time.perf_counter() - started
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps({"text": result.text, "seconds": seconds}, ensure_ascii=False), encoding="utf-8")
+    return result.text, seconds
+
+
+async def evaluate_clip(clip: dict, engine, llms, judge: Judge | None, fresh_asr: bool) -> dict:
+    path = ROOT / clip["audio_file"]
+    duration = await probe_duration(path) or 0.0
+    raw, asr_seconds = await transcribe_cached(engine, clip["id"], path, fresh_asr)
+    transcript_in = clean_transcript(raw)
+
+    started = time.perf_counter()
+    analyzer = NoteAnalyzer(llms, engine.transliteration)
+    outcome = await analyzer.process(transcript_in)
+    llm_seconds = time.perf_counter() - started
+
+    reference = clip["reference_transcript"]
+    hypothesis = outcome.transcript
+    tasks = [item.task for item in outcome.analysis.action_items]
+    row = {
+        "id": clip["id"],
+        "title": clip["title"],
+        "source": clip.get("source", "tts"),
+        "duration_sec": round(duration, 1),
+        "asr_sec": round(asr_seconds, 2),
+        "llm_sec": round(llm_seconds, 2),
+        "total_sec": round(asr_seconds + llm_seconds, 2),
+        "rtf": round((asr_seconds + llm_seconds) / duration, 3) if duration else None,
+        "wer": round(100 * wer(reference, hypothesis, basic_normalize), 2),
+        "cer": round(100 * cer(reference, hypothesis, basic_normalize), 2),
+        "hwer": round(100 * wer(reference, hypothesis, hinglish_normalize), 2),
+        "transliteration": outcome.transliteration,
+        "models": outcome.models,
+        "hypothesis": hypothesis,
+        "title_out": outcome.analysis.title,
         "summary": outcome.analysis.summary,
-        "action_items": [item.task for item in outcome.analysis.action_items],
+        "action_items": outcome.analysis.action_items_dicts(),
         "sentiment": outcome.analysis.sentiment,
     }
+    if judge is not None:
+        row["judge"] = await judge.grade(reference, clip.get("expected_actions", []), row["summary"], tasks)
+    return row
 
-MANIFEST_PATH = os.path.join(BASE_DIR, "evaluation", "test_manifest.json")
-REPORT_MD_PATH = os.path.join(BASE_DIR, "evaluation", "benchmark_report.md")
-REPORT_JSON_PATH = os.path.join(BASE_DIR, "evaluation", "latest_results.json")
 
-# Standard normalization for ASR evaluation (lowercasing, punctuation stripping)
-eval_transform = jiwer.Compose([
-    jiwer.ToLowerCase(),
-    jiwer.RemovePunctuation(),
-    jiwer.RemoveMultipleSpaces(),
-    jiwer.Strip()
-])
+async def run(args) -> None:
+    settings = load_settings()
+    if args.engine == "private":
+        os.environ["PRIVATE_ENGINE_ENABLED"] = "true"
+        settings = load_settings()
+    async with httpx.AsyncClient(timeout=180) as http:
+        registry = build_registry(settings, http)
+        engine = registry.get(args.engine)
+        llms = [make_llm(spec, settings, http) for spec in args.llm] if args.llm else engine.llms
+        judge = None if args.no_judge else Judge(make_llm(args.judge, settings, http))
 
-def normalize_text(text: str) -> str:
-    if not text:
-        return ""
-    return eval_transform(text)
+        clips = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        if args.source != "all":
+            clips = [c for c in clips if c.get("source", "tts") == args.source]
+        if args.id:
+            clips = [c for c in clips if c["id"] in args.id]
+        clips = [c for c in clips if (ROOT / c["audio_file"]).exists()][: args.limit or None]
+        if not clips:
+            raise SystemExit("No clips with audio found. Run scripts/bootstrap_eval_audio.py first.")
 
-async def evaluate_single_test(test_item: dict) -> dict:
-    test_id = test_item["id"]
-    audio_path = os.path.join(BASE_DIR, test_item["audio_file"])
-    reference = test_item["reference_transcript"]
-    expected_actions = test_item.get("expected_actions", [])
+        config_name = args.name or "-".join([engine.name, slug(engine.asr.name), *[slug(llm.name) for llm in llms[:1]]])
+        print(f"Evaluating {len(clips)} clip(s) | engine={engine.name} asr={engine.asr.name} "
+              f"llm={' -> '.join(llm.name for llm in llms)} judge={judge.llm.name if judge else 'off'}")
+        rows = []
+        for i, clip in enumerate(clips, 1):
+            print(f"[{i}/{len(clips)}] {clip['id']} ({clip.get('source', 'tts')})...", end=" ", flush=True)
+            try:
+                row = await evaluate_clip(clip, engine, llms, judge, args.fresh_asr)
+            except Exception as exc:  # keep going; a failed clip is reported, not hidden
+                print(f"FAILED: {exc}")
+                rows.append({"id": clip["id"], "title": clip["title"], "source": clip.get("source", "tts"),
+                             "error": str(exc)[:300]})
+                continue
+            judged = row.get("judge") or {}
+            recall = judged.get("recall")
+            print(f"WER {row['wer']}% hWER {row['hwer']}% | {row['total_sec']}s"
+                  + (f" | recall {recall:.0%}" if recall is not None else ""))
+            rows.append(row)
+        await registry.close()
 
-    if not os.path.exists(audio_path):
-        return {
-            "id": test_id,
-            "title": test_item["title"],
-            "category": test_item["category"],
-            "error": f"Audio file not found: {audio_path}",
-            "skipped": True
-        }
-
-    duration = await probe_duration(Path(audio_path)) or 0.0
-
-    # 1. Measure ASR Latency & Output
-    t0 = time.time()
-    raw_transcript = await transcribe_audio(audio_path)
-    asr_latency = time.time() - t0
-
-    # 2. Run LLM Summarization & Transliteration
-    t1 = time.time()
-    llm_result = await summarize_transcript(raw_transcript)
-    llm_latency = time.time() - t1
-
-    hyp_transcript = llm_result.get("transcript") or raw_transcript
-    summary = llm_result.get("summary", "")
-    actions = llm_result.get("action_items", [])
-    sentiment = llm_result.get("sentiment", "Neutral")
-
-    # 3. Calculate Speech Accuracy (WER & CER)
-    norm_ref = normalize_text(reference)
-    norm_hyp = normalize_text(hyp_transcript)
-
-    wer = jiwer.wer(norm_ref, norm_hyp)
-    cer = jiwer.cer(norm_ref, norm_hyp)
-
-    # 4. Action Item Recall (simple keyword overlap check)
-    actions_found = 0
-    actions_combined = " ".join(actions).lower()
-    for exp in expected_actions:
-        # Check if key words from expected action appear in generated actions
-        keywords = [w.lower() for w in exp.split() if len(w) > 3]
-        if any(kw in actions_combined for kw in keywords):
-            actions_found += 1
-
-    action_recall = (actions_found / len(expected_actions)) if expected_actions else 1.0
-
-    return {
-        "id": test_id,
-        "title": test_item["title"],
-        "category": test_item["category"],
-        "duration_sec": round(duration, 1),
-        "asr_latency_sec": round(asr_latency, 2),
-        "llm_latency_sec": round(llm_latency, 2),
-        "total_latency_sec": round(asr_latency + llm_latency, 2),
-        "wer": round(wer * 100, 2),
-        "cer": round(cer * 100, 2),
-        "actions_found": actions_found,
-        "actions_total": len(expected_actions),
-        "action_recall_pct": round(action_recall * 100, 1),
-        "sentiment": sentiment,
-        "hyp_transcript": hyp_transcript,
-        "summary": summary,
-        "action_items": actions,
-        "skipped": False
-    }
-
-async def run_suite(limit: int = None, target_id: str = None):
-    print("=" * 80)
-    print("🚀 VAANI AUTOMATED EVALUATION & BENCHMARK SUITE")
-    print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
-
-    if not os.path.exists(MANIFEST_PATH):
-        print(f"❌ Error: Test manifest not found at {MANIFEST_PATH}")
-        return
-
-    with open(MANIFEST_PATH, encoding="utf-8") as f:
-        tests = json.load(f)
-
-    if target_id:
-        tests = [t for t in tests if t["id"] == target_id]
-        if not tests:
-            print(f"❌ No test found with ID '{target_id}'")
-            return
-    elif limit:
-        tests = tests[:limit]
-
-    print(f"Running {len(tests)} evaluation tests...\n")
-
-    results = []
-    for idx, t in enumerate(tests, 1):
-        print(f"[{idx}/{len(tests)}] Evaluating: {t['title']} ({t['id']})...", end=" ", flush=True)
-        res = await evaluate_single_test(t)
-        if res.get("skipped"):
-            print(f"SKIPPED ({res.get('error')})")
-        else:
-            print(f"DONE (WER: {res['wer']}%, CER: {res['cer']}%, Latency: {res['asr_latency_sec']}s)")
-        results.append(res)
-
-    valid_results = [r for r in results if not r.get("skipped")]
-    if not valid_results:
-        print("\n❌ No successful test evaluations to report.")
-        return
-
-    # Aggregate Statistics
-    avg_wer = sum(r["wer"] for r in valid_results) / len(valid_results)
-    avg_cer = sum(r["cer"] for r in valid_results) / len(valid_results)
-    avg_asr_latency = sum(r["asr_latency_sec"] for r in valid_results) / len(valid_results)
-    avg_action_recall = sum(r["action_recall_pct"] for r in valid_results) / len(valid_results)
-
-    # Print Formatted Markdown Table
-    print("\n" + "=" * 80)
-    print("📊 BENCHMARK SUMMARY TABLE")
-    print("=" * 80)
-    header = f"| {'Test ID':<28} | {'Category':<18} | {'Dur (s)':<7} | {'ASR (s)':<7} | {'WER (%)':<7} | {'CER (%)':<7} | {'Actions':<8} |"
-    sep = f"|:{'-'*28}-|-{'-'*18}-|-{'-'*7}:|-{'-'*7}:|-{'-'*7}:|-{'-'*7}:|-{'-'*8}:|"
-    print(header)
-    print(sep)
-    for r in valid_results:
-        act_str = f"{r['actions_found']}/{r['actions_total']}"
-        print(f"| {r['id']:<28} | {r['category']:<18} | {r['duration_sec']:<7} | {r['asr_latency_sec']:<7} | {r['wer']:<7} | {r['cer']:<7} | {act_str:<8} |")
-
-    print("-" * 80)
-    print(f"✨ OVERALL BENCHMARK RESULTS (N = {len(valid_results)}):")
-    print(f"  • Average Word Error Rate (WER) : {avg_wer:.2f}%")
-    print(f"  • Average Character Error Rate (CER) : {avg_cer:.2f}%")
-    print(f"  • Average ASR Latency : {avg_asr_latency:.2f}s")
-    print(f"  • Action Item Extraction Recall : {avg_action_recall:.1f}%")
-    print("=" * 80)
-
-    # Save to JSON
-    summary_payload = {
-        "timestamp": datetime.now().isoformat(),
-        "total_tests": len(valid_results),
-        "overall_metrics": {
-            "average_wer_pct": round(avg_wer, 2),
-            "average_cer_pct": round(avg_cer, 2),
-            "average_asr_latency_sec": round(avg_asr_latency, 2),
-            "average_action_recall_pct": round(avg_action_recall, 1)
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "config": {
+            "name": config_name,
+            "engine": engine.name,
+            "asr": engine.asr.name,
+            "llms": [llm.name for llm in llms],
+            "judge": judge.llm.name if judge else None,
+            "asr_cached": not args.fresh_asr,
+            "git_commit": git_commit(),
+            "date": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         },
-        "results": valid_results
+        "rows": rows,
     }
-    with open(REPORT_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(summary_payload, f, ensure_ascii=False, indent=2)
+    out = RESULTS_DIR / f"{config_name}.json"
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"Saved {out.relative_to(ROOT)}")
+    print(f"Report: {write_report().relative_to(ROOT)}")
 
-    # Save to Markdown Report
-    with open(REPORT_MD_PATH, "w", encoding="utf-8") as f:
-        f.write("# Vaani Evaluation & Accuracy Benchmark Report\n\n")
-        f.write(f"*Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
-        f.write("### Overall Metrics\n")
-        f.write(f"- **Total Tests Evaluated:** {len(valid_results)}\n")
-        f.write(f"- **Mean Word Error Rate (WER):** {avg_wer:.2f}%\n")
-        f.write(f"- **Mean Character Error Rate (CER):** {avg_cer:.2f}%\n")
-        f.write(f"- **Mean ASR Latency:** {avg_asr_latency:.2f}s\n")
-        f.write(f"- **Action Item Recall:** {avg_action_recall:.1f}%\n\n")
-        f.write("### Detailed Per-Test Breakdown\n\n")
-        f.write(header + "\n")
-        f.write(sep + "\n")
-        for r in valid_results:
-            act_str = f"{r['actions_found']}/{r['actions_total']}"
-            f.write(f"| {r['id']} | {r['category']} | {r['duration_sec']} | {r['asr_latency_sec']} | {r['wer']}% | {r['cer']}% | {act_str} |\n")
-        f.write("\n")
 
-    print("\n📁 Report saved to:")
-    print(f"  • {REPORT_MD_PATH}")
-    print(f"  • {REPORT_JSON_PATH}\n")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Vaani Speech & Intelligence Evaluation Suite")
-    parser.add_argument("--limit", type=int, default=None, help="Limit number of tests to run")
-    parser.add_argument("--id", type=str, default=None, help="Run a specific test by ID")
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--engine", choices=["cloud", "private"], default="cloud")
+    parser.add_argument("--llm", action="append", help="override the engine's LLMs, e.g. gemini:gemini-2.5-flash")
+    parser.add_argument("--judge", default="groq:openai/gpt-oss-120b", help="judge model (another vendor is best)")
+    parser.add_argument("--no-judge", action="store_true")
+    parser.add_argument("--source", choices=["all", "human", "tts"], default="all")
+    parser.add_argument("--id", action="append", help="only these clip ids")
+    parser.add_argument("--limit", type=int)
+    parser.add_argument("--fresh-asr", action="store_true", help="ignore cached transcripts (re-times speech-to-text)")
+    parser.add_argument("--name", help="name for this configuration in the report")
+    parser.add_argument("--llm-model", help="private engine: GGUF model path")
+    parser.add_argument("--llama-bin", default=str(ROOT / "ml" / ("llama-server.exe" if os.name == "nt" else "llama-server")))
+    parser.add_argument("--asr-backend", help="private engine: faster-whisper or onnx")
+    parser.add_argument("--asr-model", help="private engine: model size or path")
+    parser.add_argument("--report-only", action="store_true")
     args = parser.parse_args()
 
-    asyncio.run(run_suite(limit=args.limit, target_id=args.id))
+    if args.report_only:
+        print(f"Report: {write_report().relative_to(ROOT)}")
+        return
+    if args.engine == "private":
+        os.environ["LLAMA_SERVER_BIN"] = args.llama_bin
+        if args.llm_model:
+            os.environ["PRIVATE_LLM_MODEL_PATH"] = str(Path(args.llm_model).resolve())
+        if args.asr_backend:
+            os.environ["PRIVATE_ASR_BACKEND"] = args.asr_backend
+        if args.asr_model:
+            os.environ["PRIVATE_ASR_MODEL"] = args.asr_model
+    asyncio.run(run(args))
+
+
+if __name__ == "__main__":
+    main()
