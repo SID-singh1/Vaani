@@ -179,6 +179,33 @@ async def transcribe_audio(file_path: str) -> str:
                 try: os.remove(prep_path)
                 except: pass
 
+    # Local execution (USE_LOCAL_MODELS=true): INT8 Whisper ONNX on CPU.
+    # Previously this block sat after the `raise` in _call_groq_whisper, so it was
+    # unreachable and local mode returned None.
+    return await asyncio.to_thread(_transcribe_locally, file_path)
+
+
+def _transcribe_locally(file_path: str) -> str:
+    import librosa
+    load_asr_model()
+
+    # Force convert to 16kHz WAV using ffmpeg to guarantee compatibility (webm, ogg, etc)
+    wav_path = file_path + ".wav"
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-i", file_path,
+            "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        speech, _ = librosa.load(wav_path, sr=16000)
+    finally:
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+
+    # The pipeline handles long audio (chunk_length_s=30). Translate to English because
+    # the local Phi-3 model cannot read Devanagari.
+    result = asr_pipeline(speech, generate_kwargs={"task": "translate"})
+    return _clean_whisper_hallucinations(result["text"])
+
 
 async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str, max_retries: int = 2) -> str:
     """
@@ -239,27 +266,3 @@ async def _call_groq_whisper(upload_path: str, upload_name: str, mime_type: str,
             raise
     
     raise last_error or Exception("Groq Whisper API failed after all retries")
-
-    # Local Fallback Execution
-    import librosa
-    load_asr_model()
-    
-    # Force convert to 16kHz WAV using ffmpeg to guarantee compatibility (webm, ogg, etc)
-    wav_path = file_path + ".wav"
-    subprocess.run([
-        "ffmpeg", "-y", "-i", file_path, 
-        "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    
-    # Load and resample audio (it's already 16kHz WAV now)
-    speech, sr = librosa.load(wav_path, sr=16000)
-    
-    # Cleanup intermediate wav
-    if os.path.exists(wav_path):
-        os.remove(wav_path)
-    
-    # Use pipeline which automatically handles long audio (chunk_length_s=30)
-    # We command Whisper to translate to English, bypassing the LLM's inability to read Devanagari.
-    result = asr_pipeline(speech, generate_kwargs={"task": "translate"})
-    
-    return result["text"]

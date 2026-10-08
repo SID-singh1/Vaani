@@ -102,3 +102,15 @@ def test_hallucination_and_repetition_cleaner():
     triple_repeat = "audio note audio note audio note"
     assert _clean_whisper_hallucinations(triple_repeat) == "audio note"
 
+
+def test_local_mode_transcription_returns_text():
+    # Regression: the local branch used to be unreachable, so local mode returned None.
+    import asyncio
+    import services.asr_service as asr
+
+    with patch.object(asr, "USE_LOCAL_MODELS", True), \
+         patch.object(asr, "_transcribe_locally", return_value="kal meeting hai") as local:
+        result = asyncio.run(asr.transcribe_audio("note.wav"))
+
+    assert result == "kal meeting hai"
+    local.assert_called_once_with("note.wav")
