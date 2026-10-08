@@ -8,11 +8,13 @@ load_dotenv(dotenv_path)
 class BotConfig:
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     FASTAPI_BACKEND_URL = os.getenv("FASTAPI_BACKEND_URL", "http://127.0.0.1:8000")
-    INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "vaani_internal_secret_key_2026")
+    INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
     
     @classmethod
     def validate(cls):
         if not cls.TELEGRAM_BOT_TOKEN or cls.TELEGRAM_BOT_TOKEN == "your_token_here":
             raise ValueError("TELEGRAM_BOT_TOKEN is missing or invalid in the .env file. Please add it.")
+        if not cls.INTERNAL_API_SECRET:
+            raise ValueError("INTERNAL_API_SECRET is missing. Set the same random value for the bot and the backend.")
 
 config = BotConfig()

@@ -95,7 +95,7 @@ async function loadDashboardData(days = 7) {
     const headers = key ? { 'x-admin-key': key } : {};
 
     try {
-        const url = `/admin/analytics?days=${days}${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+        const url = `/admin/analytics?days=${days}`;
         const response = await fetch(url, { headers });
 
         if (response.status === 401) {

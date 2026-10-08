@@ -114,3 +114,25 @@ def test_local_mode_transcription_returns_text():
 
     assert result == "kal meeting hai"
     local.assert_called_once_with("note.wav")
+
+def test_telegram_history_requires_secret_header():
+    from core.config import config
+
+    # No secret configured on the server: always denied, even with a guessed value.
+    with patch.object(config, "INTERNAL_API_SECRET", ""):
+        res = client.get("/history/tg_1", headers={"X-Internal-Secret": "vaani_internal_secret_key_2026"})
+        assert res.status_code == 403
+
+    with patch.object(config, "INTERNAL_API_SECRET", "s3cret"):
+        assert client.get("/history/tg_1").status_code == 403
+        # Query-string secrets are no longer accepted (they end up in logs).
+        assert client.get("/history/tg_1?secret=s3cret").status_code == 403
+        assert client.get("/history/tg_1", headers={"X-Internal-Secret": "s3cret"}).status_code == 200
+
+
+def test_admin_requires_header_key():
+    from core.config import config
+
+    with patch.object(config, "ADMIN_SECRET_KEY", "adm"):
+        assert client.get("/admin/analytics?key=adm").status_code == 401
+        assert client.get("/admin/analytics", headers={"x-admin-key": "adm"}).status_code == 200

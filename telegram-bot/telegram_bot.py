@@ -458,7 +458,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     res = await client.get(
-                        f"{config.FASTAPI_BACKEND_URL}/interaction/{interaction_id}?secret={config.INTERNAL_API_SECRET}",
+                        f"{config.FASTAPI_BACKEND_URL}/interaction/{interaction_id}",
                         headers=headers
                     )
                     if res.is_success:
