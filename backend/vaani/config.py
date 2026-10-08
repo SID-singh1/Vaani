@@ -140,7 +140,9 @@ def load_settings() -> Settings:
         telegram_token = ""
     telegram_mode = _str("TELEGRAM_MODE").lower()
     if not telegram_mode:
-        telegram_mode = ("webhook" if env == "production" else "polling") if telegram_token else "disabled"
+        # Never poll implicitly: polling with a production token from a laptop steals the live
+        # bot's updates and deletes its webhook. Local polling must be asked for explicitly.
+        telegram_mode = "webhook" if (env == "production" and telegram_token) else "disabled"
 
     # Render sets RENDER_EXTERNAL_URL automatically, so webhooks work without extra config there.
     public_base_url = (_str("PUBLIC_BASE_URL") or _str("RENDER_EXTERNAL_URL")).rstrip("/")
@@ -148,6 +150,9 @@ def load_settings() -> Settings:
     database_url = _str("DATABASE_URL") or f"sqlite:///{(REPO_ROOT / 'vaani.db').as_posix()}"
     if database_url.startswith("postgres://"):  # Heroku/Supabase-style scheme SQLAlchemy rejects
         database_url = "postgresql://" + database_url[len("postgres://") :]
+
+    if env != "production" and not database_url.startswith("sqlite"):
+        log.warning("Development run is using a non-SQLite DATABASE_URL. If that is production, use scripts/dev.py.")
 
     return Settings(
         env=env,

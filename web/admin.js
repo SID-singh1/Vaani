@@ -1,262 +1,124 @@
-let currentDays = 7;
-let timelineChartInstance = null;
-let sentimentChartInstance = null;
+'use strict';
 
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+const $ = (id) => document.getElementById(id);
+const KEY = 'vaani_admin_key';
+let days = 30;
+const charts = {};
+
+function getKey() { try { return sessionStorage.getItem(KEY) || ''; } catch (_) { return ''; } }
+function setKey(value) { try { value ? sessionStorage.setItem(KEY, value) : sessionStorage.removeItem(KEY); } catch (_) { /* ignore */ } }
+
+function el(tag, attrs = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'class') node.className = v; else if (k === 'text') node.textContent = v; else node.setAttribute(k, v);
+    }
+    for (const child of children) if (child !== null && child !== undefined) node.append(child);
+    return node;
+}
+
+const fmt = {
+    num: (v) => (v === null || v === undefined ? '–' : Number(v).toLocaleString()),
+    pct: (v) => (v === null || v === undefined ? '–' : `${v}%`),
+    ms: (v) => (v === null || v === undefined ? '–' : v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${v}ms`),
+    when: (iso) => (iso ? new Date(iso).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''),
+};
+
+async function load() {
+    const key = getKey();
+    if (!key) { $('authDialog').showModal(); return; }
+    const res = await fetch(`/api/v1/admin/analytics?days=${days}`, { headers: { 'X-Admin-Key': key } });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+        setKey('');
+        $('authError').textContent = data?.error?.message || 'Invalid key.';
+        $('authError').classList.remove('hidden');
+        $('authDialog').showModal();
+        return;
+    }
+    if (!res.ok) { alert(data?.error?.message || `Failed to load (${res.status})`); return; }
+    render(data);
+}
+
+function stat(label, value, sub) {
+    return el('div', { class: 'panel stat' },
+        el('div', { class: 'stat-label', text: label }),
+        el('div', { class: 'stat-value', text: value }),
+        sub ? el('div', { class: 'stat-sub', text: sub }) : null);
+}
+
+function render(d) {
+    $('generatedAt').textContent = `Last ${d.window_days} days · updated ${fmt.when(d.generated_at)} · test accounts excluded`;
+    const ratingSub = d.ratings.accuracy_pct === null ? 'no ratings yet' : `${d.ratings.thumbs_up} 👍 · ${d.ratings.thumbs_down} 👎`;
+    $('stats').replaceChildren(
+        stat('Users (all time)', fmt.num(d.users.total), `${fmt.num(d.users.new_in_window)} new in window`),
+        stat('Weekly active', fmt.num(d.users.wau), `DAU ${fmt.num(d.users.dau)} · MAU ${fmt.num(d.users.mau)}`),
+        stat('Returning users', fmt.pct(d.users.returning_rate), `${fmt.num(d.users.returning)} used it on 2+ days`),
+        stat('Notes', fmt.num(d.notes.in_window), `${fmt.num(d.notes.total_done)} all time`),
+        stat('Audio processed', `${fmt.num(d.notes.audio_minutes_in_window)} min`, 'in window'),
+        stat('Latency p50 / p95', `${fmt.ms(d.latency_ms.p50)}`, `p95 ${fmt.ms(d.latency_ms.p95)} · ${fmt.num(d.latency_ms.samples)} notes`),
+        stat('Failure rate', fmt.pct(d.notes.failure_rate), `${fmt.num(d.notes.failed_in_window)} failed`),
+        stat('Rated accurate', fmt.pct(d.ratings.accuracy_pct), ratingSub),
+    );
+
+    if (window.Chart) {
+        Chart.defaults.color = 'rgba(255,255,255,0.6)';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+        Chart.defaults.font.family = 'Outfit, sans-serif';
+        charts.timeline?.destroy();
+        charts.timeline = new Chart($('timelineChart'), {
+            data: {
+                labels: d.timeline.map((t) => t.date.slice(5)),
+                datasets: [
+                    { type: 'bar', label: 'Notes', data: d.timeline.map((t) => t.notes), backgroundColor: 'rgba(99,102,241,0.6)', borderRadius: 4 },
+                    { type: 'line', label: 'Active users', data: d.timeline.map((t) => t.active_users), borderColor: '#f59e0b', pointRadius: 0, tension: 0.3 },
+                ],
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+        });
+        const channels = Object.entries(d.channels);
+        charts.channels?.destroy();
+        charts.channels = new Chart($('channelChart'), {
+            type: 'doughnut',
+            data: {
+                labels: channels.length ? channels.map(([k]) => k) : ['no data'],
+                datasets: [{ data: channels.length ? channels.map(([, v]) => v) : [1],
+                    backgroundColor: ['#6366f1', '#22d3ee', '#10b981', '#f59e0b'], borderWidth: 0 }],
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+        });
+    }
+
+    $('recentBody').replaceChildren(...(d.recent.length ? d.recent.map((n) => el('tr', {},
+        el('td', { text: fmt.when(n.created_at) }),
+        el('td', {}, el('code', { text: n.user })),
+        el('td', { text: n.channel || '' }),
+        el('td', { text: n.title || '–' }),
+        el('td', {}, el('span', { class: `pill ${n.status}`, text: n.status })),
+        el('td', { text: fmt.ms(n.total_ms) }),
+    )) : [el('tr', {}, el('td', { colspan: '6', text: 'No notes yet.' }))]));
+
+    $('feedbackList').replaceChildren(...(d.feedback.length ? d.feedback.map((f) => el('div', { class: 'feedback-item' },
+        el('small', { text: `${fmt.when(f.created_at)} · ${f.user}` }), f.message))
+        : [el('p', { class: 'stat-sub', text: 'No feedback yet.' })]));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    initAuth();
-    setupEventListeners();
-    loadDashboardData(currentDays);
+    $('authSubmit').addEventListener('click', () => {
+        const value = $('adminKey').value.trim();
+        if (!value) return;
+        setKey(value);
+        $('authError').classList.add('hidden');
+        $('authDialog').close();
+        load();
+    });
+    $('adminKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('authSubmit').click(); });
+    $('refreshBtn').addEventListener('click', load);
+    $('lockBtn').addEventListener('click', () => { setKey(''); $('adminKey').value = ''; $('authDialog').showModal(); });
+    document.querySelectorAll('#rangeSwitch button').forEach((button) => button.addEventListener('click', () => {
+        document.querySelectorAll('#rangeSwitch button').forEach((b) => b.classList.toggle('active', b === button));
+        days = Number(button.dataset.days);
+        load();
+    }));
+    load();
 });
-
-function getAdminKey() {
-    return sessionStorage.getItem('vaani_admin_key') || localStorage.getItem('vaani_admin_key') || '';
-}
-
-function setAdminKey(key) {
-    sessionStorage.setItem('vaani_admin_key', key);
-    localStorage.setItem('vaani_admin_key', key);
-}
-
-function clearAdminKey() {
-    sessionStorage.removeItem('vaani_admin_key');
-    localStorage.removeItem('vaani_admin_key');
-}
-
-function initAuth() {
-    const authModal = document.getElementById('authModal');
-    const authSubmitBtn = document.getElementById('authSubmitBtn');
-    const adminKeyInput = document.getElementById('adminKeyInput');
-    const authError = document.getElementById('authError');
-
-    authSubmitBtn.addEventListener('click', async () => {
-        const key = adminKeyInput.value.trim();
-        if (!key) return;
-
-        setAdminKey(key);
-        authError.style.display = 'none';
-        
-        const success = await loadDashboardData(currentDays);
-        if (success) {
-            authModal.classList.add('hidden');
-        } else {
-            authError.style.display = 'block';
-            clearAdminKey();
-        }
-    });
-
-    adminKeyInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            authSubmitBtn.click();
-        }
-    });
-}
-
-function setupEventListeners() {
-    // Range filter buttons
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
-            currentDays = parseInt(e.target.getAttribute('data-days'), 10);
-            loadDashboardData(currentDays);
-        });
-    });
-
-    // Refresh button
-    const refreshBtn = document.getElementById('refreshBtn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => {
-            loadDashboardData(currentDays);
-        });
-    }
-
-    // Lock button
-    const lockBtn = document.getElementById('lockBtn');
-    if (lockBtn) {
-        lockBtn.addEventListener('click', () => {
-            clearAdminKey();
-            document.getElementById('authModal').classList.remove('hidden');
-            document.getElementById('adminKeyInput').value = '';
-            document.getElementById('authError').style.display = 'none';
-        });
-    }
-}
-
-async function loadDashboardData(days = 7) {
-    const authModal = document.getElementById('authModal');
-    const key = getAdminKey();
-    const headers = key ? { 'x-admin-key': key } : {};
-
-    try {
-        const url = `/admin/analytics?days=${days}`;
-        const response = await fetch(url, { headers });
-
-        if (response.status === 401) {
-            authModal.classList.remove('hidden');
-            return false;
-        }
-
-        if (!response.ok) {
-            throw new Error(`Server returned HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        authModal.classList.add('hidden');
-
-        // Render Stat Cards
-        document.getElementById('statTotalUsers').textContent = (data.total_users ?? 0).toLocaleString();
-        document.getElementById('statTotalNotes').textContent = (data.total_interactions ?? 0).toLocaleString();
-        document.getElementById('statToday').textContent = (data.today_interactions ?? 0).toLocaleString();
-
-        const feedback = data.feedback || {};
-        const accElement = document.getElementById('statAccuracy');
-        const accSub = document.getElementById('statAccuracySub');
-        if (feedback.accuracy_percentage !== null && feedback.accuracy_percentage !== undefined) {
-            accElement.textContent = `${feedback.accuracy_percentage}%`;
-            accSub.innerHTML = `👍 ${feedback.thumbs_up} Accurate &bull; 👎 ${feedback.thumbs_down} Inaccurate`;
-        } else {
-            accElement.textContent = '100%';
-            accSub.textContent = 'Awaiting more user ratings';
-        }
-
-        // Render Charts
-        renderTimelineChart(data.timeline || {});
-        renderSentimentChart(data.sentiment_breakdown || {});
-
-        // Render Recent Table
-        renderRecentTable(data.recent_interactions || []);
-
-        return true;
-    } catch (err) {
-        console.error('Failed to load dashboard metrics:', err);
-        return false;
-    }
-}
-
-function renderTimelineChart(timelineData) {
-    const ctx = document.getElementById('timelineChart').getContext('2d');
-    const labels = Object.keys(timelineData);
-    const values = Object.values(timelineData);
-
-    if (timelineChartInstance) {
-        timelineChartInstance.destroy();
-    }
-
-    Chart.defaults.color = 'rgba(255, 255, 255, 0.6)';
-    Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.06)';
-
-    timelineChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels.length > 0 ? labels : ['No Data'],
-            datasets: [{
-                label: 'Voice Notes',
-                data: values.length > 0 ? values : [0],
-                backgroundColor: 'rgba(99, 102, 241, 0.6)',
-                borderColor: 'rgba(99, 102, 241, 1)',
-                borderWidth: 1.5,
-                borderRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { precision: 0 }
-                }
-            }
-        }
-    });
-}
-
-function renderSentimentChart(sentimentData) {
-    const ctx = document.getElementById('sentimentChart').getContext('2d');
-
-    if (sentimentChartInstance) {
-        sentimentChartInstance.destroy();
-    }
-
-    const labels = Object.keys(sentimentData);
-    const values = Object.values(sentimentData);
-
-    const bgColors = {
-        'Positive': 'rgba(34, 197, 94, 0.7)',
-        'Neutral': 'rgba(148, 163, 184, 0.7)',
-        'Negative': 'rgba(239, 68, 68, 0.7)',
-        'Unknown': 'rgba(99, 102, 241, 0.7)'
-    };
-
-    const colors = labels.map(l => bgColors[l] || 'rgba(148, 163, 184, 0.7)');
-
-    sentimentChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: values.length > 0 ? values : [1],
-                backgroundColor: colors,
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { boxWidth: 12, padding: 15 }
-                }
-            }
-        }
-    });
-}
-
-function renderRecentTable(interactions) {
-    const tbody = document.getElementById('recentTableBody');
-    if (!tbody) return;
-
-    if (!interactions || interactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.4); padding: 20px;">No interaction records found yet.</td></tr>';
-        return;
-    }
-
-    let rowsHtml = '';
-    interactions.forEach(item => {
-        const sentimentClass = item.sentiment === 'Positive' ? 'badge-positive' :
-                               item.sentiment === 'Negative' ? 'badge-negative' : 'badge-neutral';
-
-        let feedbackBadge = '<span class="badge badge-unrated">⏳ Unrated</span>';
-        if (item.accuracy_rating === 'thumbs_up') {
-            feedbackBadge = '<span class="badge badge-up">👍 Accurate</span>';
-        } else if (item.accuracy_rating === 'thumbs_down') {
-            feedbackBadge = '<span class="badge badge-down">👎 Inaccurate</span>';
-        }
-
-        const summaryText = item.summary && item.summary.length > 80 ? 
-                            item.summary.substring(0, 80) + '...' : (item.summary || 'None');
-
-        rowsHtml += `
-            <tr>
-                <td style="white-space: nowrap; font-size: 0.85rem; color: rgba(255,255,255,0.6);">${escapeHtml(item.timestamp)}</td>
-                <td><code style="background: rgba(255,255,255,0.06); padding: 3px 6px; border-radius: 4px; font-size: 0.8rem;">${escapeHtml(item.user_id)}</code></td>
-                <td>${escapeHtml(summaryText)}</td>
-                <td><span class="badge ${sentimentClass}">${escapeHtml(item.sentiment || 'Neutral')}</span></td>
-                <td>${feedbackBadge}</td>
-            </tr>
-        `;
-    });
-
-    tbody.innerHTML = rowsHtml;
-}

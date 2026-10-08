@@ -228,6 +228,10 @@ def create_app(settings: Settings | None = None, registry_factory: RegistryFacto
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
     for route, page in (("/", "index.html"), ("/admin", "admin.html"), ("/privacy", "privacy.html")):
         app.add_api_route(route, _page(page), methods=["GET", "HEAD"], include_in_schema=False)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        return FileResponse(WEB_DIR / "favicon.svg", media_type="image/svg+xml")
     return app
 
 

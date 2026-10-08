@@ -3,155 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vaani | On-Device Intelligence</title>
-    <!-- Modern Typography -->
+    <title>Vaani · Hinglish voice notes → summaries & action items</title>
+    <meta name="description" content="Send a Hindi, English or Hinglish voice note. Get a summary, action items and a clean Romanized transcript.">
+    <meta name="theme-color" content="#0b0f19">
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- FontAwesome for icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    
-    <div class="app-container">
-        <!-- Sidebar History -->
-        <aside class="sidebar">
-            <div class="brand">
-                <i class="fa-solid fa-microphone-lines brand-icon"></i>
-                <h2>Vaani</h2>
-                <span class="badge">Local AI</span>
-            </div>
-            
-            <div class="history-section">
-                <h3>Recent Transcripts</h3>
-                <ul id="historyList" class="history-list">
-                    <!-- History items injected by JS -->
-                </ul>
-            </div>
-            
-            <div class="sidebar-footer">
-                <div class="status-indicator">
-                    <span class="dot pulse"></span>
-                    <span>Systems Online</span>
-                </div>
-            </div>
-        </aside>
+<div class="app">
+    <div class="backdrop" id="backdrop"></div>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <header class="top-nav">
-                <div class="greeting">
-                    <h1>Transcribe & Summarize</h1>
-                    <p>Powered by quantized Whisper & Phi-3</p>
+    <aside class="sidebar" id="sidebar" aria-label="Your notes">
+        <div class="brand">
+            <i class="fa-solid fa-microphone-lines brand-icon" aria-hidden="true"></i>
+            <h2>Vaani</h2>
+            <span class="badge">Hinglish AI</span>
+            <button class="icon-btn sidebar-close" id="closeSidebar" aria-label="Close notes"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <button class="btn btn-primary" id="newNoteBtn"><i class="fa-solid fa-plus"></i> New note</button>
+
+        <div class="history-header">
+            <h3>Your notes</h3>
+            <button class="link-btn hidden" id="deleteAllBtn">Delete all</button>
+        </div>
+        <div class="history">
+            <ul class="history-list" id="historyList"></ul>
+            <p class="history-empty hidden" id="historyEmpty">No notes yet. Record your first one!</p>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="usage hidden" id="usage">
+                <span id="usageText"></span>
+                <div class="usage-bar"><span id="usageBar"></span></div>
+            </div>
+            <div class="footer-links">
+                <a href="https://t.me/Vaani_hinglish_bot" target="_blank" rel="noopener"><i class="fa-brands fa-telegram"></i> Telegram</a>
+                <a href="/privacy">Privacy</a>
+                <a href="https://github.com/SID-singh1/Vaani" target="_blank" rel="noopener">GitHub</a>
+                <button class="link-btn" id="feedbackBtn">Feedback</button>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="content">
+            <header class="topbar">
+                <button class="icon-btn menu-btn" id="openSidebar" aria-label="Open your notes"><i class="fa-solid fa-bars"></i></button>
+                <div class="topbar-text">
+                    <h1>Voice notes, sorted.</h1>
+                    <p>Speak in Hindi, English or Hinglish. Get a summary, who-does-what action items and a clean Hinglish transcript.</p>
                 </div>
             </header>
 
-            <div class="content-wrapper">
-                
-                <!-- Upload / Record Zone -->
-                <section class="upload-zone glass-panel" id="dropZone">
-                    <div class="upload-content">
-                        <div class="mic-btn-wrapper">
-                            <button id="recordBtn" class="mic-btn">
-                                <i class="fa-solid fa-microphone"></i>
-                            </button>
-                            <div class="waves"></div>
-                        </div>
-                        <button id="cancelRecordBtn" class="btn secondary-btn hidden" style="margin-bottom: 1rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">
-                            <i class="fa-solid fa-xmark"></i> Cancel Recording
-                        </button>
-                        <h3 id="uploadTitle">Upload or Record Audio</h3>
-                        <p class="subtitle" id="uploadSubtitle">Drop your Hindi/Hinglish audio file here</p>
-                        
-                        <div class="file-input-wrapper" id="fileInputWrapper">
-                            <input type="file" id="fileInput" accept="audio/*,video/mp4,video/webm,.mp3,.wav,.ogg,.m4a,.mp4,.flac" hidden>
-                            <button class="btn primary-btn" onclick="document.getElementById('fileInput').click()">
-                                <i class="fa-solid fa-folder-open"></i> Browse Files
-                            </button>
-                        </div>
-                    </div>
-                </section>
-                
-                <!-- Loading State -->
-                <section id="loadingState" class="loading-state hidden">
-                    <div class="spinner">
-                        <div class="double-bounce1"></div>
-                        <div class="double-bounce2"></div>
-                    </div>
-                    <h3 id="loadingText">Processing audio on local AI...</h3>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar"></div>
-                    </div>
-                </section>
-
-                <!-- Results Zone -->
-                <section id="resultsZone" class="results-zone hidden">
-                    
-                    <div class="result-header">
-                        <h2>Analysis Results</h2>
-                        <span id="sentimentBadge" class="sentiment-badge">Neutral</span>
-                    </div>
-
-                    <div class="results-grid">
-                        <div class="result-card glass-panel summary-card">
-                            <div class="card-header">
-                                <i class="fa-solid fa-bolt icon-gradient"></i>
-                                <h3>AI Summary</h3>
-                            </div>
-                            <div class="card-body">
-                                <p id="summaryText">Summary will appear here...</p>
-                            </div>
-                        </div>
-
-                        <div class="result-card glass-panel action-card">
-                            <div class="card-header">
-                                <i class="fa-solid fa-check-double icon-gradient"></i>
-                                <h3>Action Items</h3>
-                            </div>
-                            <div class="card-body">
-                                <ul id="actionItemsList" class="action-items-list">
-                                    <!-- Items injected by JS -->
-                                </ul>
-                            </div>
-                        </div>
-
-                        <details class="transcript-accordion glass-panel" id="transcriptAccordion">
-                            <summary class="accordion-header">
-                                <div class="accordion-title">
-                                    <i class="fa-solid fa-align-left icon-gradient"></i>
-                                    <span>View Full Transcript</span>
-                                </div>
-                                <i class="fa-solid fa-chevron-down accordion-icon"></i>
-                            </summary>
-                            <div class="accordion-body">
-                                <p id="transcriptText">Transcript will appear here...</p>
-                            </div>
-                        </details>
-                    </div>
-                    
-                    <div class="actions-row">
-                        <div class="web-feedback-group" id="webFeedbackGroup">
-                            <span class="feedback-label"><i class="fa-solid fa-chart-line"></i> Accuracy:</span>
-                            <button class="feedback-btn" id="thumbsUpBtn" title="Accurate transcription & summary">
-                                <i class="fa-regular fa-thumbs-up"></i>
-                            </button>
-                            <button class="feedback-btn" id="thumbsDownBtn" title="Inaccurate transcription or summary">
-                                <i class="fa-regular fa-thumbs-down"></i>
-                            </button>
-                            <span id="feedbackNotice" class="feedback-notice hidden"></span>
-                        </div>
-                        <button class="btn secondary-btn" id="newUploadBtn">
-                            <i class="fa-solid fa-rotate-left"></i> Analyze Another
-                        </button>
-                    </div>
-
-                </section>
+            <div class="mode-row">
+                <div class="segmented hidden" id="modeSwitch" role="radiogroup" aria-label="Processing mode"></div>
+                <span class="mode-note" id="modeNote"></span>
             </div>
-        </main>
-    </div>
 
-    <!-- Scripts -->
-    <script src="/static/app.js"></script>
+            <!-- Compose: record / upload -->
+            <section class="panel composer" id="composer">
+                <div class="mic-wrap">
+                    <button class="mic-btn" id="recordBtn" aria-label="Start recording"><i class="fa-solid fa-microphone"></i></button>
+                    <div class="waves"></div>
+                </div>
+                <h3 id="composerTitle">Tap to record</h3>
+                <p class="subtitle" id="composerSubtitle">or drop an audio file here</p>
+                <div class="composer-actions" id="composerActions">
+                    <label class="btn" for="fileInput"><i class="fa-solid fa-folder-open"></i> Upload audio</label>
+                    <input type="file" id="fileInput" class="sr-only"
+                           accept="audio/*,video/mp4,video/webm,video/quicktime,.mp3,.m4a,.ogg,.opus,.wav,.flac,.aac,.amr,.mp4">
+                    <button class="btn btn-ghost" id="showTextBtn"><i class="fa-solid fa-keyboard"></i> Paste text</button>
+                </div>
+                <div class="composer-actions hidden" id="recordingActions">
+                    <button class="btn btn-primary" id="stopBtn"><i class="fa-solid fa-stop"></i> Done</button>
+                    <button class="btn btn-ghost" id="cancelRecordBtn"><i class="fa-solid fa-xmark"></i> Cancel</button>
+                </div>
+                <p class="hint" id="composerHint">Works with WhatsApp voice notes, mp3, m4a, wav and video files.</p>
+            </section>
+
+            <!-- Compose: text -->
+            <section class="panel text-composer hidden" id="textComposer">
+                <label class="sr-only" for="textInput">Text to summarize</label>
+                <textarea id="textInput" maxlength="20000"
+                          placeholder="Paste meeting notes, a long chat or a transcript…"></textarea>
+                <div class="row">
+                    <span class="counter" id="textCounter">0 / 20,000</span>
+                    <div class="toolbar-group">
+                        <button class="btn btn-ghost" id="cancelTextBtn">Cancel</button>
+                        <button class="btn btn-primary" id="submitTextBtn" disabled><i class="fa-solid fa-wand-magic-sparkles"></i> Summarize</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress -->
+            <section class="panel progress-panel hidden" id="progress" aria-live="polite">
+                <h3 id="progressTitle">Working on your note…</h3>
+                <p class="progress-sub" id="progressSub">This usually takes 10–30 seconds.</p>
+                <ol class="steps">
+                    <li class="step" data-step="upload"><span class="bullet"></span><span>Uploading</span><span class="step-detail" id="uploadDetail"></span></li>
+                    <li class="step" data-step="queued"><span class="bullet"></span><span>Waiting in queue</span><span class="step-detail" id="queueDetail"></span></li>
+                    <li class="step" data-step="transcribing"><span class="bullet"></span><span>Transcribing</span></li>
+                    <li class="step" data-step="analyzing"><span class="bullet"></span><span>Writing summary & action items</span></li>
+                </ol>
+                <div class="upload-bar" id="uploadBar"><span></span></div>
+            </section>
+
+            <!-- Error -->
+            <section class="panel error-panel hidden" id="errorPanel" role="alert">
+                <h3>That didn't work</h3>
+                <p id="errorText"></p>
+                <div class="toolbar"><button class="btn" id="errorRetryBtn"><i class="fa-solid fa-rotate-left"></i> Try another note</button></div>
+            </section>
+
+            <!-- Result -->
+            <section class="result hidden" id="result">
+                <div class="result-header">
+                    <h2 id="resultTitle"></h2>
+                    <span class="sentiment-badge" id="sentimentBadge"></span>
+                </div>
+                <p class="result-meta" id="resultMeta"></p>
+
+                <div class="results-grid">
+                    <article class="panel card">
+                        <div class="card-header"><i class="fa-solid fa-bolt icon-gradient"></i><h3>Summary</h3></div>
+                        <p class="summary-text" id="summaryText"></p>
+                    </article>
+                    <article class="panel card">
+                        <div class="card-header"><i class="fa-solid fa-list-check icon-gradient"></i><h3>Action items</h3></div>
+                        <ul class="actions-list" id="actionsList"></ul>
+                    </article>
+                    <details class="panel transcript" id="transcriptBox">
+                        <summary><span><i class="fa-solid fa-align-left icon-gradient"></i> Full transcript</span><i class="fa-solid fa-chevron-down chev"></i></summary>
+                        <div class="transcript-body"><p id="transcriptText"></p></div>
+                    </details>
+                </div>
+
+                <div class="toolbar">
+                    <div class="rating">
+                        <span>Accurate?</span>
+                        <button class="rate-btn up" id="rateUp" aria-label="Accurate"><i class="fa-regular fa-thumbs-up"></i></button>
+                        <button class="rate-btn down" id="rateDown" aria-label="Inaccurate"><i class="fa-regular fa-thumbs-down"></i></button>
+                    </div>
+                    <div class="toolbar-group">
+                        <button class="btn btn-sm" id="copyBtn"><i class="fa-regular fa-copy"></i> Copy</button>
+                        <button class="btn btn-sm" id="downloadBtn"><i class="fa-solid fa-download"></i> .md</button>
+                        <button class="btn btn-sm btn-danger" id="deleteBtn"><i class="fa-regular fa-trash-can"></i> Delete</button>
+                        <button class="btn btn-sm btn-primary" id="anotherBtn"><i class="fa-solid fa-plus"></i> New note</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<dialog id="feedbackDialog">
+    <h3>Send feedback</h3>
+    <p>What should Vaani do better? It goes straight to the developer.</p>
+    <label class="sr-only" for="feedbackText">Feedback</label>
+    <textarea id="feedbackText" maxlength="4000" placeholder="e.g. please add PDF export"></textarea>
+    <div class="dialog-actions">
+        <button class="btn btn-ghost" id="feedbackCancel">Cancel</button>
+        <button class="btn btn-primary" id="feedbackSend">Send</button>
+    </div>
+</dialog>
+
+<script src="/static/app.js"></script>
 </body>
 </html>
