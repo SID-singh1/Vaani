@@ -1,93 +1,134 @@
-# Vaani | On-Device Hindi-Hinglish Voice Intelligence
+# Vaani: Hinglish voice notes → summaries & action items
 
-<div align="center">
-  <img src="https://via.placeholder.com/800x400?text=Vaani+Web+Dashboard+Screenshot" alt="Vaani Dashboard UI" width="100%"/>
-</div>
+Send a voice note in **Hindi, English or Hinglish** (the code-mixed way most of urban India talks) and get back
+a short summary, **who-does-what-by-when action items**, and a clean transcript in Romanized Hinglish.
+Works on **Telegram**, **WhatsApp** and the **web**.
 
-<br>
+[![CI](https://github.com/SID-singh1/Vaani/actions/workflows/ci.yml/badge.svg)](https://github.com/SID-singh1/Vaani/actions/workflows/ci.yml)
+· Try it: [@Vaani_hinglish_bot](https://t.me/Vaani_hinglish_bot) on Telegram
 
-**Vaani** is a highly-optimized Voice AI pipeline designed to instantly transcribe and summarize Hindi-English (Hinglish) voice notes. It features a unique **Dual Engine Architecture**: it can run 100% on-device for absolute data privacy using quantized local models, or it can dynamically switch to cloud APIs (Groq & Gemini) for blazing fast speed and extreme accuracy on low-end hardware.
+<p align="center">
+  <img src=".github/assets/web-result.jpg" alt="A processed voice note: summary, action items with owners and deadlines" width="68%">
+  <img src=".github/assets/web-mobile.jpg" alt="The same view on a phone" width="24%">
+</p>
 
----
+> *"Kal client ke saath call hai 4 baje. Amit tu pricing deck update kar dena by tonight…"*
+> → **Update the pricing deck** · 👤 Amit · ⏰ tonight
 
-## 📸 See It In Action
+## Results
 
-### 1. Telegram Bot Integration
-Users can seamlessly forward 5-minute Hinglish voice notes from WhatsApp or Telegram directly to the Vaani Bot. It processes the audio locally and instantly replies with a clean, bulleted English summary and action items.
+Measured with the [evaluation suite](evaluation/README.md) (LLM judge from a different model family; full report:
+[benchmark_report.md](evaluation/benchmark_report.md)):
 
-<div align="center">
-  <img src="https://via.placeholder.com/400x600?text=Telegram+Bot+Action+Screenshot" alt="Telegram Bot Demo" width="45%"/>
-</div>
+| Fast mode (Groq Whisper large-v3 + Gemini 2.5 Flash) | Real recording (2.9 min) | 14 synthetic clips |
+|---|--:|--:|
+| Word error rate, strict / Hinglish-normalized | 10.2% / 6.2% | 7.1% / 3.8% |
+| Expected action items found (recall) | 100% | 81% |
+| Generated action items supported by the transcript (precision) | 88% | 100% |
+| Processing time | 13.2 s (0.07× real time) | ~3 s per clip |
 
-### 2. Admin Analytics Dashboard
-A stunning, glassmorphism-themed Admin Dashboard that queries the local SQLite database to provide live metrics on usage, including a 7-day activity timeline and Sentiment Analysis of processed voice notes.
+**Caveats, stated up front:** there is only one real recording so far; the synthetic clips are text-to-speech and
+therefore optimistic. Nearly every "unsupported claim" the judge found traced back to speech recognition mishearing
+names and jargon ("Groq" → "Grok"), not to the language model inventing things. More real recordings are the next
+step ([how to contribute one](evaluation/README.md#adding-a-real-recording)).
 
-<div align="center">
-  <img src="https://via.placeholder.com/800x400?text=Admin+Dashboard+Screenshot" alt="Admin Analytics Dashboard" width="100%"/>
-</div>
+## Why two engines
 
----
+Vaani started fully on-device: INT8-quantized Whisper and a 4-bit Phi-3 running on a laptop CPU. That works,
+but no free host can run ~3 GB of models (Render's free tier has 512 MB of RAM), and CPU inference is slow.
+So the project ships two engines behind one interface:
 
-## 🏗️ Architecture & Engineering: The Dual Engine
+| | ⚡ **Fast** (hosted default) | 🔒 **Private** (self-hosted) |
+|---|---|---|
+| Speech-to-text | Whisper large-v3 on Groq | Whisper (faster-whisper INT8, or the original ONNX INT8 export) on your CPU |
+| Summary & actions | Gemini 2.5 Flash → Gemini 3.5 Flash → Groq gpt-oss-120b → Gemini 3.5 Flash-Lite (automatic failover) | A local GGUF model via llama.cpp server |
+| Where audio goes | Groq and Google (see [privacy](web/privacy.html)) | Nowhere: it never leaves the machine |
+| Runs on | Free tiers, ₹0 | Any machine with ~6 GB RAM (`docker compose up`) |
 
-Vaani achieves extreme flexibility through a Strategy Pattern architecture, controlled via the `USE_LOCAL_MODELS` environment variable.
+Where both are available, users choose per account (`/mode` in Telegram, a toggle on the web).
 
-### 🛡️ Engine 1: Absolute Privacy (100% On-Device)
-Designed for highly sensitive business communications, this engine guarantees no data ever leaves your hardware.
-1. **ASR (Speech-to-Text):** Uses a custom INT8 quantized `Whisper-small` model running via `optimum.onnxruntime`. Audio is force-chunked and resampled using FFmpeg to guarantee no hallucinations on long clips, delivering lightning-fast CPU inference.
-2. **LLM (Summarization):** Uses Microsoft's `Phi-3-mini` (3.8B parameters) quantized to 4-bit (`Q4_K_M`) GGUF. By bypassing slow Python bindings and acting as a reverse-proxy to the native C++ `llama-server`, it achieves upwards of 7-10 tokens/s on a standard consumer CPU.
+## Architecture
 
-### ⚡ Engine 2: Speed & Accuracy (Cloud APIs)
-Designed for low-end hardware and high concurrency, this engine leverages state-of-the-art cloud infrastructure.
-1. **ASR (Speech-to-Text):** Dynamically switches to **Groq's LPU** hardware to run `whisper-large-v3`, achieving instant, near zero-latency transcription of complex Hinglish audio.
-2. **LLM (Summarization):** Streams the transcript to **Google's Gemini 2.5 Flash** to extract structured JSON (Summaries, Action Items, Sentiment) with industry-leading intelligence and context awareness.
-
----
-
-## 📊 Benchmarks & Accuracy
-
-Benchmarked on natural conversational Hindi-English (Hinglish) audio recordings:
-
-| Pipeline Engine | ASR Model | Precision | Memory (RAM) | Latency (CPU / LPU) | Test Set WER | Test Set CER |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cloud Engine** | Whisper Large V3 | FP16 | Cloud API | ~1.2s | **11.3%** | **5.8%** |
-| **On-Device (Local)** | Whisper Small | INT8 (ONNX) | **928 MB** | ~7.9s (Intel CPU) | **24.6%** | **13.2%** |
-| **Local LLM** | Phi-3-mini (3.8B) | INT4 (GGUF) | **2.28 GB** | 7.8 tok/s | 100% Schema Valid | N/A |
-
-*Note: In code-mixed Hinglish evaluation, standard WER primarily reflects phonetic transliteration conventions (e.g., `toh` vs `to`, numeral tokenization `11` vs `eleven`), with Character Error Rate (CER) remaining at **5.8%**.*
-
-## 💻 Tech Stack
-* **Backend:** FastAPI, SQLAlchemy (SQLite), python-telegram-bot
-* **ML Inference:** `llama.cpp` (LLM), `optimum` & `onnxruntime` (ASR)
-* **Frontend:** Vanilla HTML/JS, Modern CSS (Glassmorphism), Chart.js
-* **DevOps:** Docker (Containerized for 1-click cloud deployment)
-
----
-
-## 🚀 Run It Yourself (Locally)
-
-Because this project runs heavy ML models locally, you will need to run two terminal windows to bring the entire pipeline online.
-
-### 1. Start the FastAPI AI Backend
-This terminal loads the `Whisper` and `Phi-3` models into memory and starts the web server.
-
-```powershell
-# Activate your virtual environment
-.\venv\Scripts\Activate.ps1
-
-# Start the FastAPI server
-uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
+```mermaid
+flowchart LR
+    TG[Telegram<br/>webhook] --> SVC
+    WA[WhatsApp<br/>Cloud API webhook] --> SVC
+    WEB[Web client<br/>signed session] --> API[REST API v1] --> SVC
+    SVC[NoteService<br/>quotas · idempotency] --> Q[(Job queue<br/>per-engine lanes)]
+    Q --> P[Pipeline]
+    P --> ASR[Speech-to-text<br/>Groq Whisper / local Whisper]
+    P --> CLEAN[Cleanup<br/>hallucinations · loops]
+    P --> AN[Analyzer<br/>transliteration · JSON schema · validation]
+    AN --> LLMS[LLM chain with<br/>quota-aware failover]
+    P --> DB[(Postgres / SQLite<br/>Alembic migrations)]
+    DB --> ADMIN[Admin analytics<br/>WAU · retention · p95 latency]
 ```
-*You can now open `http://127.0.0.1:8000` to view the Web App, or `http://127.0.0.1:8000/admin` for Analytics.*
 
-### 2. Start the Telegram Bot
-Open a **second** terminal window to start the Telegram polling service.
+Design choices worth knowing:
 
-```powershell
-# Activate your virtual environment
-.\venv\Scripts\Activate.ps1
+- **One process, by design.** API, job queue and both bots run in a single container because that is what a free
+  instance can run. Jobs persist their status in the database and are marked failed (with a clear message) if the
+  process restarts mid-note. Scaling out would mean moving the queue to Postgres (`SKIP LOCKED`) or Redis; the
+  `JobManager` interface wouldn't change.
+- **Free-tier engineering.** Each model has its own small free quota, so the LLM chain treats them as one pool:
+  quota errors are never retried (retries also count), exhausted models are skipped without a request until they
+  recover, and short per-minute limits are waited out instead of failing the note. Per-user and global daily limits
+  keep the service inside the free tiers.
+- **Hinglish handling.** Whisper often writes Hindi in Devanagari (or Urdu script). Short notes are transliterated
+  and analyzed in one LLM call to save quota; long ones are transliterated in chunks so no single response gets
+  truncated. A rule-based transliterator with Hindi schwa deletion (करना → *karna*, not *karanaa*) does the
+  private engine's transliteration and backs up the LLM, so users never get Devanagari back.
+- **Untrusted model output.** Transcripts are passed to the LLM as data; output must match a JSON schema and pass
+  validation, otherwise the next model in the chain answers.
+- **Webhooks, not polling.** Free instances sleep; Telegram's and Meta's webhook requests wake them.
+- **Privacy.** Audio is deleted after transcription; transcripts are never logged by default; WhatsApp numbers are
+  stored only as keyed hashes; users can delete their data from every channel.
 
-# Start the bot
-python telegram-bot\telegram_bot.py
+## Tech stack
+
+FastAPI · SQLAlchemy + Alembic · httpx · python-telegram-bot · WhatsApp Cloud API · Groq · Gemini ·
+faster-whisper / ONNX Runtime · llama.cpp · vanilla JS · Docker · GitHub Actions · pytest (134 tests, offline
+fakes for every provider, a fake Telegram Bot API and a mocked WhatsApp Graph API).
+
+## Run it locally
+
+```bash
+python -m venv venv && venv\Scripts\activate       # Windows (macOS/Linux: source venv/bin/activate)
+pip install -r requirements-dev.txt
+cp .env.example .env                               # add GROQ_API_KEY and GEMINI_API_KEY
+python scripts/dev.py                              # http://127.0.0.1:8000
 ```
-*Your bot is now live and waiting for voice notes!*
+
+`scripts/dev.py` always uses a local SQLite file and keeps Telegram off, even if `.env` points at production.
+Add `--private` to enable the on-device engine, or `--telegram-polling` (with a separate *test* bot token).
+
+```bash
+pytest                                # 134 tests, ~5 s, no network
+python scripts/run_eval_suite.py      # evaluation (uses your API keys)
+```
+
+Deploying (Render + Supabase, all free), WhatsApp setup and self-hosting: **[DEPLOY.md](DEPLOY.md)**.
+
+## Project layout
+
+```
+backend/vaani/        the application package
+  engines/            provider adapters (Groq, Gemini, OpenAI-compatible, local Whisper, llama.cpp)
+  analysis.py         prompts, schemas, validation, transliteration strategy
+  pipeline.py         one note end to end;  jobs.py: background queue
+  channels/           Telegram and WhatsApp
+  api/                REST API, admin analytics
+  text/               transcript cleanup, rule-based transliteration
+  migrations/         Alembic
+web/                  web client, admin dashboard, privacy page
+evaluation/           metrics, LLM judge, manifest, results
+ml/                   original quantization/export and benchmark scripts (ONNX INT8 Whisper, GGUF Phi-3)
+marketing/            landing page (React + Vite, GitHub Pages)
+```
+
+## Limitations
+
+- One real recording in the evaluation set (more wanted).
+- Speech recognition still mishears names and technical terms.
+- Free-tier quotas cap throughput; see [DEPLOY.md](DEPLOY.md#6-free-tier-limits-and-capacity).
+- The private engine hasn't been re-benchmarked since v2; its numbers will be added to the report.

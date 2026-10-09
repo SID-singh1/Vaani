@@ -232,3 +232,7 @@ def test_request_info_helps_configure_proxy_hops(client):
     assert info["x_forwarded_for"] == "1.2.3.4, 203.0.113.7"
     assert info["trusted_proxy_hops"] == 0 and info["derived_client_ip"] == "testclient"
     assert client.get("/api/v1/admin/request-info").status_code == 401
+
+
+def test_deep_health_checks_database(client):
+    assert client.get("/health?deep=1").json()["database"] == "ok"

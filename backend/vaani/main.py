@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
@@ -214,15 +215,25 @@ def create_app(settings: Settings | None = None, registry_factory: RegistryFacto
     app.include_router(whatsapp_routes.router)
 
     @app.api_route("/health", methods=["GET", "HEAD"])
-    async def health(request: Request):
+    async def health(request: Request, deep: bool = False):
+        """Liveness. With ?deep=1 it also runs a trivial database query: point an uptime monitor at
+        that so free-tier Postgres (Supabase pauses idle projects) sees regular activity."""
         ctx: AppContext = request.app.state.ctx
-        return {
+        body = {
             "status": "ok",
             "version": __version__,
             "engines": [e.name for e in ctx.registry.available()],
             "telegram": settings.telegram_mode if ctx.telegram else "off",
             "whatsapp": bool(ctx.whatsapp),
         }
+        if deep:
+            try:
+                await ctx.db.run(lambda session: session.execute(text("SELECT 1")))
+                body["database"] = "ok"
+            except Exception:
+                log.exception("Database health check failed")
+                return JSONResponse({**body, "status": "degraded", "database": "unreachable"}, status_code=503)
+        return body
 
     WEB_DIR.mkdir(exist_ok=True)
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
