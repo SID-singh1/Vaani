@@ -173,3 +173,12 @@ def ffmpeg_version() -> str:
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_provider_cooldowns():
+    from vaani.engines.http import reset_cooldowns
+
+    reset_cooldowns()
+    yield
+    reset_cooldowns()

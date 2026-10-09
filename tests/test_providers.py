@@ -172,3 +172,68 @@ class TestGroqASR:
         assert seen["auth"] == "Bearer gk"
         assert b'name="response_format"' in seen["body"] and b"verbose_json" in seen["body"]
         assert sorted(p.name for p in tmp_path.iterdir()) == ["in.wav"]  # converted temp file removed
+
+
+class TestQuotaCooldown:
+    async def test_daily_quota_is_not_retried_and_provider_is_skipped(self):
+        calls = []
+
+        def handler(request):
+            calls.append(1)
+            return httpx.Response(
+                429,
+                json={
+                    "error": {
+                        "code": 429,
+                        "message": "You exceeded your current quota",
+                        "details": [
+                            {"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]},
+                            {"retryDelay": "41s"},
+                        ],
+                    }
+                },
+            )
+
+        client = GeminiClient("k", "gemini-2.5-flash", mock_http(handler))
+        with pytest.raises(ProviderError, match="daily quota"):
+            await client.generate(system="s", user="u")
+        with pytest.raises(ProviderError, match="cooldown"):
+            await client.generate(system="s", user="u")
+        assert len(calls) == 1  # no retries, and the second call never hit the network
+
+    async def test_retry_delay_in_body_beyond_max_wait_fails_fast(self):
+        calls = []
+
+        def handler(request):
+            calls.append(1)
+            return httpx.Response(429, json={"error": {"details": [{"retryDelay": "40s"}]}})
+
+        with pytest.raises(ProviderError, match="rate limited for 40s"):
+            await GeminiClient("k", "gemini-3.5-flash", mock_http(handler)).generate(system="s", user="u")
+        assert len(calls) == 1
+
+    async def test_short_rate_limit_is_retried(self):
+        calls = []
+
+        def handler(request):
+            calls.append(1)
+            if len(calls) == 1:
+                return httpx.Response(429, json={"error": {"details": [{"retryDelay": "1s"}]}})
+            return gemini_ok("fine")
+
+        assert await GeminiClient("k", "gemini-3.5-flash", mock_http(handler)).generate(system="s", user="u") == "fine"
+
+
+def test_llm_chain_keeps_order_and_skips_missing_keys():
+    from vaani.config import Settings
+    from vaani.engines.registry import _cloud_llms
+
+    chain = ["gemini:gemini-2.5-flash", "groq:openai/gpt-oss-120b", "nope:model", "gemini:gemini-3.5-flash"]
+    both = Settings(groq_api_key="g", gemini_api_key="k", llm_chain=chain)
+    assert [llm.name for llm in _cloud_llms(both, None)] == [
+        "gemini:gemini-2.5-flash",
+        "groq:openai/gpt-oss-120b",
+        "gemini:gemini-3.5-flash",
+    ]
+    groq_only = Settings(groq_api_key="g", llm_chain=chain)
+    assert [llm.name for llm in _cloud_llms(groq_only, None)] == ["groq:openai/gpt-oss-120b"]

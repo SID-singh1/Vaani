@@ -53,3 +53,6 @@ ml/mlruns/
 # Evaluation caches (derived data; re-creatable)
 evaluation/.cache/
 dev.db
+
+# Database backups contain user data
+backups/

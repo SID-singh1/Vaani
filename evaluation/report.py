@@ -41,7 +41,8 @@ def summarize(rows: list[dict]) -> dict:
         "recall": _judge_mean(ok, "recall"),
         "precision": _judge_mean(ok, "precision"),
         "hallucinated": (sum(1 for r in judged if r["judge"]["summary_unsupported_claims"]) / len(judged))
-        if judged else None,
+        if judged
+        else None,
         "p50": percentile(totals, 50),
         "p95": percentile(totals, 95),
         "rtf": _mean(ok, "rtf"),
@@ -86,7 +87,8 @@ def write_report() -> Path:
             )
         lines.append("")
 
-    lines += ["## Runs", "", "| Configuration | Speech-to-text | LLMs | Judge | Commit | Date |", "|:--|:--|:--|:--|:--|:--|"]
+    lines += ["## Runs", "", "| Configuration | Speech-to-text | LLMs | Judge | Commit | Date |"]
+    lines.append("|:--|:--|:--|:--|:--|:--|")
     for run in runs:
         cfg = run["config"]
         cached = " (cached transcripts)" if cfg.get("asr_cached") else ""

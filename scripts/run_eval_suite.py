@@ -38,9 +38,9 @@ from evaluation.report import RESULTS_DIR, write_report  # noqa: E402
 from vaani.analysis import NoteAnalyzer  # noqa: E402
 from vaani.audio import probe_duration  # noqa: E402
 from vaani.config import load_settings  # noqa: E402
-from vaani.engines.gemini import GeminiClient  # noqa: E402
-from vaani.engines.openai_compat import ChatCompletionsClient  # noqa: E402
-from vaani.engines.registry import GROQ_OPENAI_BASE, build_registry  # noqa: E402
+from vaani.engines.http import cooling_down  # noqa: E402
+from vaani.engines.registry import build_registry  # noqa: E402
+from vaani.engines.registry import make_llm as registry_make_llm  # noqa: E402
 from vaani.text.cleanup import clean_transcript  # noqa: E402
 
 MANIFEST = ROOT / "evaluation" / "test_manifest.json"
@@ -52,20 +52,17 @@ def slug(text: str) -> str:
 
 
 def make_llm(spec: str, settings, http):
-    provider, _, model = spec.partition(":")
-    if provider == "gemini":
-        return GeminiClient(settings.gemini_api_key, model, http)
-    if provider == "groq":
-        extra = {"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {}
-        return ChatCompletionsClient(name=f"groq:{model}", base_url=GROQ_OPENAI_BASE, model=model, http=http,
-                                     api_key=settings.groq_api_key, extra_body=extra)
-    raise SystemExit(f"unknown LLM spec {spec!r}; use gemini:<model> or groq:<model>")
+    llm = registry_make_llm(spec, settings, http)
+    if llm is None:
+        raise SystemExit(f"can't build LLM {spec!r}: use gemini:<model> or groq:<model> and set its API key")
+    return llm
 
 
 def git_commit() -> str:
     try:
-        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
-                              cwd=ROOT).stdout.strip()
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT
+        ).stdout.strip()
     except OSError:
         return "unknown"
 
@@ -143,22 +140,45 @@ async def run(args) -> None:
             raise SystemExit("No clips with audio found. Run scripts/bootstrap_eval_audio.py first.")
 
         config_name = args.name or "-".join([engine.name, slug(engine.asr.name), *[slug(llm.name) for llm in llms[:1]]])
-        print(f"Evaluating {len(clips)} clip(s) | engine={engine.name} asr={engine.asr.name} "
-              f"llm={' -> '.join(llm.name for llm in llms)} judge={judge.llm.name if judge else 'off'}")
+        print(
+            f"Evaluating {len(clips)} clip(s) | engine={engine.name} asr={engine.asr.name} "
+            f"llm={' -> '.join(llm.name for llm in llms)} judge={judge.llm.name if judge else 'off'}"
+        )
+        previous = {}
+        saved = RESULTS_DIR / f"{config_name}.json"
+        if args.resume and saved.exists():
+            previous = {r["id"]: r for r in json.loads(saved.read_text(encoding="utf-8"))["rows"] if "error" not in r}
         rows = []
         for i, clip in enumerate(clips, 1):
             print(f"[{i}/{len(clips)}] {clip['id']} ({clip.get('source', 'tts')})...", end=" ", flush=True)
-            try:
-                row = await evaluate_clip(clip, engine, llms, judge, args.fresh_asr)
-            except Exception as exc:  # keep going; a failed clip is reported, not hidden
-                print(f"FAILED: {exc}")
-                rows.append({"id": clip["id"], "title": clip["title"], "source": clip.get("source", "tts"),
-                             "error": str(exc)[:300]})
+            if clip["id"] in previous:
+                print("kept from previous run")
+                rows.append(previous[clip["id"]])
+                continue
+            row = None
+            for attempt in range(2):
+                try:
+                    row = await evaluate_clip(clip, engine, llms, judge, args.fresh_asr)
+                    break
+                except Exception as exc:  # keep going; a failed clip is reported, not hidden
+                    wait = max([cooling_down(llm.name) for llm in llms] + [0])
+                    if attempt == 0 and 0 < wait <= 90:
+                        print(f"rate limited, waiting {wait:.0f}s...", end=" ", flush=True)
+                        await asyncio.sleep(wait + 1)
+                        continue
+                    print(f"FAILED: {exc}")
+                    error = str(exc)[:300]
+            if row is None:
+                rows.append(
+                    {"id": clip["id"], "title": clip["title"], "source": clip.get("source", "tts"), "error": error}
+                )
                 continue
             judged = row.get("judge") or {}
             recall = judged.get("recall")
-            print(f"WER {row['wer']}% hWER {row['hwer']}% | {row['total_sec']}s"
-                  + (f" | recall {recall:.0%}" if recall is not None else ""))
+            print(
+                f"WER {row['wer']}% hWER {row['hwer']}% | {row['total_sec']}s"
+                + (f" | recall {recall:.0%}" if recall is not None else "")
+            )
             rows.append(row)
         await registry.close()
 
@@ -186,7 +206,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--engine", choices=["cloud", "private"], default="cloud")
     parser.add_argument("--llm", action="append", help="override the engine's LLMs, e.g. gemini:gemini-2.5-flash")
-    parser.add_argument("--judge", default="groq:openai/gpt-oss-120b", help="judge model (another vendor is best)")
+    parser.add_argument("--judge", default="groq:qwen/qwen3.8-27b", help="judge model (another vendor is best)")
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--source", choices=["all", "human", "tts"], default="all")
     parser.add_argument("--id", action="append", help="only these clip ids")
@@ -194,9 +214,11 @@ def main() -> None:
     parser.add_argument("--fresh-asr", action="store_true", help="ignore cached transcripts (re-times speech-to-text)")
     parser.add_argument("--name", help="name for this configuration in the report")
     parser.add_argument("--llm-model", help="private engine: GGUF model path")
-    parser.add_argument("--llama-bin", default=str(ROOT / "ml" / ("llama-server.exe" if os.name == "nt" else "llama-server")))
+    llama_exe = "llama-server.exe" if os.name == "nt" else "llama-server"
+    parser.add_argument("--llama-bin", default=str(ROOT / "ml" / llama_exe))
     parser.add_argument("--asr-backend", help="private engine: faster-whisper or onnx")
     parser.add_argument("--asr-model", help="private engine: model size or path")
+    parser.add_argument("--resume", action="store_true", help="keep clips that succeeded in the saved run")
     parser.add_argument("--report-only", action="store_true")
     args = parser.parse_args()
 

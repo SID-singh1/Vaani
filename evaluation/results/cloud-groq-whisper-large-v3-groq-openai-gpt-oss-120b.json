@@ -1,0 +1,732 @@
+{
+ "config": {
+  "name": "cloud-groq-whisper-large-v3-groq-openai-gpt-oss-120b",
+  "engine": "cloud",
+  "asr": "groq:whisper-large-v3",
+  "llms": [
+   "groq:openai/gpt-oss-120b"
+  ],
+  "judge": "groq:qwen/qwen3.8-27b",
+  "asr_cached": true,
+  "git_commit": "a45264e",
+  "date": "2026-10-09 09:07 UTC"
+ },
+ "rows": [
+  {
+   "id": "test_01_quick_task_delegation",
+   "title": "Quick Task Delegation",
+   "source": "tts",
+   "duration_sec": 10.5,
+   "asr_sec": 1.44,
+   "llm_sec": 1.24,
+   "total_sec": 2.68,
+   "rtf": 0.254,
+   "wer": 13.04,
+   "cer": 3.31,
+   "hwer": 13.04,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Rahul, kal subah client demo hai. To please payment gateway wala bug resolve kar dena aur mujhe do baje tak update bheje dena.",
+   "title_out": "Client Demo and Payment Gateway Bug",
+   "summary": "A client demo is scheduled for tomorrow morning. The payment gateway bug must be resolved and an update sent by 2 PM.",
+   "action_items": [
+    {
+     "task": "Resolve the payment gateway bug",
+     "owner": "Rahul",
+     "due": "by tomorrow 2 PM"
+    },
+    {
+     "task": "Send the update to the speaker",
+     "owner": "Rahul",
+     "due": "by tomorrow 2 PM"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_02_team_sync_long",
+   "title": "Long Product Sync (2.5 mins)",
+   "source": "human",
+   "duration_sec": 175.7,
+   "asr_sec": 7.65,
+   "llm_sec": 5.08,
+   "total_sec": 12.73,
+   "rtf": 0.072,
+   "wer": 12.57,
+   "cer": 6.06,
+   "hwer": 6.23,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "haan to basically kal ka jo project sync tha usmein humne thoda sa discuss kiya ki app ka current status kya hai aur next week tak humein exactly kya complete karna hai. abhi back end ka major part almost done hai. But transcription pipeline mein thoda latency issue aa raha hai. kabhi kabhi audio upload karne ke baad transcript aane mein 30-40 seconds lag rahe hain. which is okay for a prototype but production mein itna delay nahi hona chahiye Rohit ne bola ki wo aaj evening tak check karega ki processing ko background job mein shift kar sakte hain ya nahi agar wo possible hai to user ko ek loading state dikha denge instead of making them wait on the same screen maine bola ki haan ye better approach hai Front End Site pe Neha ko Summary aur Action Items ka UI Finalize karna hai abhi Cards thode Basic hain to Ideally Summary ek Separate Section mein ho aur Action Items Checkbox ke saath dikhen Important ye hai ki agar Action Item mein Deadline ya kisi pasand ka naam Mention ho to wo bhi Extract ho jaaye For example Friday client email output owner amit task client email due date Friday ek aur cheez humein English ke liye tasting aur karni padegi because kuch recordings mein English aur Hindi. Sentence ke beech mein switching kaafi frequent hai. maine do sample recordings already share kar di hain. but Priya ko aur at least 5 recordings collect karke deni hai preferably different accents or different speaking speeds ke saath marketing wala part abhi hold pe rakho because product flow stable hone ke baad high landing page copy finalize karna useful hoga so immediate priority back-end latency action item extraction aur front-end UI hai aaj ke end tak Rohit latency ka update dega Neha latest UI screen shot share karegi aur Priya testing ke liye additional recordings upload karegi main meanwhile extraction prompt ko improve karunga aur specifically dates, names aur tasks ko structured format mein nikalne ki koshish karunga. aur haan kal subah 11 baje ek short 15 minute sync rakh lete hain usmein bas blockers discuss karenge koi long meeting nahin agar sab green hai to directly implementation continue karenge",
+   "title_out": "Project Sync Follow-up and Action Items",
+   "summary": "The team discussed the current project status, noting that the backend is mostly complete but the transcription pipeline has latency issues. Immediate priorities are to address backend latency, improve action item extraction, and finalize the front‑end UI for summaries and action items. Upcoming tasks and a short sync meeting were assigned to ensure progress before implementation continues.",
+   "action_items": [
+    {
+     "task": "Check if processing can be shifted to a background job and update on latency",
+     "owner": "Rohit",
+     "due": "today evening"
+    },
+    {
+     "task": "Finalize the Summary and Action Items UI and share the latest UI screenshot",
+     "owner": "Neha",
+     "due": "today end"
+    },
+    {
+     "task": "Collect and upload at least 5 additional recordings with different accents or speaking speeds",
+     "owner": "Priya",
+     "due": null
+    },
+    {
+     "task": "Improve the extraction prompt to output dates, names, and tasks in a structured format",
+     "owner": "Me",
+     "due": null
+    },
+    {
+     "task": "Hold a short 15 minute sync tomorrow at 11 AM to discuss blockers",
+     "owner": null,
+     "due": "tomorrow 11 AM"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2,
+     3,
+     4,
+     6
+    ],
+    "supported": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "recall": 0.8333333333333334,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_03_urgent_bug_triage",
+   "title": "Urgent Production Bug Triage",
+   "source": "tts",
+   "duration_sec": 14.7,
+   "asr_sec": 0.9,
+   "llm_sec": 1.18,
+   "total_sec": 2.08,
+   "rtf": 0.141,
+   "wer": 9.09,
+   "cer": 2.84,
+   "hwer": 6.06,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Production Database pe Timeout Errors aa rahe hain. Amit, Do Please Logs check kar aur Replica Node ko Restart kar. Agar 15 minit mein Fix nahi hua to main Team ko Alert karunga.",
+   "title_out": "Production Database Timeout Issues",
+   "summary": "The production database is experiencing timeout errors. Amit is asked to check the logs and restart the replica node, and if the issue is not resolved within 15 minutes, the speaker will alert the team.",
+   "action_items": [
+    {
+     "task": "Check the logs for the production database",
+     "owner": "Amit",
+     "due": null
+    },
+    {
+     "task": "Restart the replica node",
+     "owner": "Amit",
+     "due": null
+    },
+    {
+     "task": "Alert the team if the issue is not fixed within 15 minutes",
+     "owner": "Me",
+     "due": "within 15 minutes"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2,
+     3
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_04_client_pitch_feedback",
+   "title": "Client Pitch & Pricing Negotiation",
+   "source": "tts",
+   "duration_sec": 23.3,
+   "asr_sec": 1.16,
+   "llm_sec": 1.14,
+   "total_sec": 2.3,
+   "rtf": 0.099,
+   "wer": 11.11,
+   "cer": 5.21,
+   "hwer": 8.89,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Client meeting kaafi positive rahi. Unko hamara English transcription feature bahut pasand aaya. Unhone Enterprise plan ke liye 20% discount maanga hai Annual commitment pay. Maine bola ki hum kal tak revised proposal share karenge. Sneha, to please updated pricing doc prepare kar lena.",
+   "title_out": "Client Meeting on English Transcription Feature",
+   "summary": "The client responded positively to the English transcription feature and requested a 20% discount on the Enterprise plan with an annual commitment. The speaker promised to share a revised proposal by the next day and asked Sneha to prepare an updated pricing document.",
+   "action_items": [
+    {
+     "task": "Share the revised proposal with the client",
+     "owner": "Me",
+     "due": "by tomorrow"
+    },
+    {
+     "task": "Prepare the updated pricing document",
+     "owner": "Sneha",
+     "due": null
+    }
+   ],
+   "sentiment": "Positive",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": [
+     "The client responded positively to the English transcription feature"
+    ]
+   }
+  },
+  {
+   "id": "test_05_database_migration_plan",
+   "title": "PostgreSQL Migration & Maintenance Window",
+   "source": "tts",
+   "duration_sec": 20.9,
+   "asr_sec": 0.87,
+   "llm_sec": 1.37,
+   "total_sec": 2.24,
+   "rtf": 0.107,
+   "wer": 2.33,
+   "cer": 0.78,
+   "hwer": 2.33,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Saturday midnight ko hum database migration execute karenge from SQLite to Superbase PostgresQL. Maintenance window raat ko 2 baje se 4 baje tak rahegi. Rohit ne backup script verify kar li hai. aur sabhi users ko notification Friday evening ko send karni hai.",
+   "title_out": "Database Migration Execution Plan",
+   "summary": "The team will run a database migration from SQLite to Supabase PostgreSQL at Saturday midnight, with a maintenance window from 2 AM to 4 AM. Rohit has verified the backup script, and a notification must be sent to all users on Friday evening.",
+   "action_items": [
+    {
+     "task": "Execute the database migration from SQLite to Supabase PostgreSQL",
+     "owner": null,
+     "due": "Saturday midnight"
+    },
+    {
+     "task": "Send notification to all users about the maintenance",
+     "owner": null,
+     "due": "Friday evening"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_06_frontend_ui_redesign",
+   "title": "Frontend Glassmorphism UI Review",
+   "source": "tts",
+   "duration_sec": 18.1,
+   "asr_sec": 1.06,
+   "llm_sec": 2.33,
+   "total_sec": 3.39,
+   "rtf": 0.188,
+   "wer": 15.79,
+   "cer": 4.19,
+   "hwer": 12.82,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Neha, New Dark Mode Glass Morphism UI kaafi clean lag raha hai. Bas Mobile Screen pe Action Item Checklist ka Margin thoda tight hai. Button Click pe Micro Animation aa dijiye aur Thursday tak Pull Request open kar dena.",
+   "title_out": "New Dark Mode UI Review",
+   "summary": "The speaker notes that the new dark mode glass morphism UI looks clean but the margin on the action item checklist is slightly tight on mobile screens. They request adding a micro animation on button clicks and opening a pull request by Thursday.",
+   "action_items": [
+    {
+     "task": "Open the pull request for the UI changes",
+     "owner": null,
+     "due": "by Thursday"
+    }
+   ],
+   "sentiment": "Positive",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     3
+    ],
+    "supported": [
+     1
+    ],
+    "recall": 0.3333333333333333,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_07_candidate_interview_feedback",
+   "title": "Hiring Interview Debrief",
+   "source": "tts",
+   "duration_sec": 20.4,
+   "asr_sec": 1.07,
+   "llm_sec": 4.51,
+   "total_sec": 5.58,
+   "rtf": 0.273,
+   "wer": 6.98,
+   "cer": 0.78,
+   "hwer": 4.65,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Candidate ka Python aur Fast API knowledge solid hai. System Design round mein bhi usne Database Indexing aur Caching acche se explain kiya. Main Use Final round ke liye recommend kar raha hoon. HR ko bolo ki Founder Interview schedule kare for Monday afternoon.",
+   "title_out": "Candidate Evaluation for Final Round",
+   "summary": "The candidate demonstrated strong Python and Fast API skills and explained database indexing and caching well during the system design round. The speaker recommends moving the candidate to the final round and requests HR to arrange a founder interview on Monday afternoon.",
+   "action_items": [
+    {
+     "task": "Schedule the Founder Interview for Monday afternoon",
+     "owner": "HR",
+     "due": "Monday afternoon"
+    }
+   ],
+   "sentiment": "Positive",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     2
+    ],
+    "supported": [
+     1
+    ],
+    "recall": 0.5,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_08_marketing_launch_campaign",
+   "title": "Marketing Launch & Social Media",
+   "source": "tts",
+   "duration_sec": 15.2,
+   "asr_sec": 0.75,
+   "llm_sec": 4.9,
+   "total_sec": 5.65,
+   "rtf": 0.373,
+   "wer": 15.15,
+   "cer": 6.9,
+   "hwer": 6.06,
+   "transliteration": "rules",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Product Hunt Launch hum Next Wednesday Schedule karenge. Priya Short Demo Video Record karegi aur LinkedIn Post Draft karegi. Hamaara Target First Day pe Atleast 500 Active Signups Reach karna hai.",
+   "title_out": "Product Hunt Launch Planning",
+   "summary": "The team will schedule the Product Hunt launch for next Wednesday, with Priya creating a short demo video and drafting a LinkedIn post. The goal is to achieve at least 500 active sign‑ups on the first day.",
+   "action_items": [
+    {
+     "task": "Schedule the Product Hunt launch for next Wednesday",
+     "owner": null,
+     "due": "next Wednesday"
+    },
+    {
+     "task": "Record a short demo video",
+     "owner": "Priya",
+     "due": null
+    },
+    {
+     "task": "Draft the LinkedIn post",
+     "owner": "Priya",
+     "due": null
+    },
+    {
+     "task": "Reach at least 500 active sign‑ups on the first day",
+     "owner": null,
+     "due": null
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2,
+     3
+    ],
+    "supported": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_09_casual_team_outing",
+   "title": "Casual Team Outing & Lunch",
+   "source": "tts",
+   "duration_sec": 13.2,
+   "asr_sec": 0.88,
+   "llm_sec": 19.6,
+   "total_sec": 20.48,
+   "rtf": 1.546,
+   "wer": 6.45,
+   "cer": 1.19,
+   "hwer": 3.23,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "bhai san, Friday ko sprint finish ho raha hai to evening mein team dinner rakhte hain Indiranagar mein. sab log please 4 baje tak restaurant options vote kar do group pe.",
+   "title_out": "Team Dinner Planning After Sprint",
+   "summary": "The sprint finishes on Friday and the team will have a dinner in Indiranagar in the evening. Everyone is asked to vote for restaurant options on the group chat by 4 PM.",
+   "action_items": [
+    {
+     "task": "Vote for restaurant options on the group chat",
+     "owner": null,
+     "due": "by 4 PM"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     2
+    ],
+    "supported": [
+     1
+    ],
+    "recall": 0.5,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_10_api_rate_limiting_design",
+   "title": "API Rate Limiting & Quota Management",
+   "source": "tts",
+   "duration_sec": 19.1,
+   "asr_sec": 1.12,
+   "llm_sec": 0.87,
+   "total_sec": 1.99,
+   "rtf": 0.104,
+   "wer": 17.5,
+   "cer": 9.83,
+   "hwer": 15.0,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Spam Requests Prevent karne ke liye humne Slow Pee Add kiya hai with 30 Requests. Default Limit Free Tier Users ko Daily 10 Voice Notes milenge aur Pro Tier Users Unlimited. Nick Hill Redis Configuration Test kar lena kal tak.",
+   "title_out": "Spam Request Prevention and Tier Limits",
+   "summary": "The team added a slow‑pee mechanism to limit spam requests to 30. Free tier users will receive 10 voice notes per day, while pro tier users have unlimited access. Nick Hill is tasked with testing the Redis configuration by tomorrow.",
+   "action_items": [
+    {
+     "task": "Test the Redis configuration",
+     "owner": "Nick Hill",
+     "due": "by tomorrow"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     3
+    ],
+    "supported": [
+     1
+    ],
+    "recall": 0.3333333333333333,
+    "precision": 1.0,
+    "summary_unsupported_claims": [
+     "The team added a slow‑pee mechanism",
+     "Nick Hill is tasked with testing the Redis configuration"
+    ]
+   }
+  },
+  {
+   "id": "test_11_telegram_bot_features",
+   "title": "Telegram Bot Enhancement Sync",
+   "source": "tts",
+   "duration_sec": 17.4,
+   "asr_sec": 0.85,
+   "llm_sec": 1.52,
+   "total_sec": 2.37,
+   "rtf": 0.136,
+   "wer": 7.89,
+   "cer": 1.77,
+   "hwer": 0.0,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Telegram Bot mein Users History maang rahe hain. Humein History Command aur Selective Delete option add karna hai. Aur jab Voice Note receive ho to Instant Processing Status message bhejna hai taaki user ko lage. Bot responsive hai.",
+   "title_out": "Telegram Bot User History Feature",
+   "summary": "The team needs to add a history command and a selective delete option to the Telegram bot. Additionally, an instant processing status message should be sent when a voice note is received to improve user experience.",
+   "action_items": [
+    {
+     "task": "Add the History Command to the Telegram bot",
+     "owner": null,
+     "due": null
+    },
+    {
+     "task": "Implement the Selective Delete option for user history",
+     "owner": null,
+     "due": null
+    },
+    {
+     "task": "Send an instant processing status message when a voice note is received",
+     "owner": null,
+     "due": null
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2,
+     3
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_12_legal_nda_compliance",
+   "title": "Legal & Vendor Agreement",
+   "source": "tts",
+   "duration_sec": 16.0,
+   "asr_sec": 0.75,
+   "llm_sec": 1.23,
+   "total_sec": 1.98,
+   "rtf": 0.123,
+   "wer": 3.03,
+   "cer": 2.07,
+   "hwer": 0.0,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Cloud Provider ka Master Service Agreement Review ho gaya hai. Clause 4 mein Data Retention Policy Update karni hai. Siddhant. Document Sign karke Legal Team ko Email kar dena Before 5 PM Today.",
+   "title_out": "Master Service Agreement Review and Updates",
+   "summary": "The Master Service Agreement with the cloud provider has been reviewed. Clause 4 requires an update to the Data Retention Policy, and Siddhant must sign the document and email it to the Legal Team before 5 PM today.",
+   "action_items": [
+    {
+     "task": "Update the Data Retention Policy in Clause 4",
+     "owner": "Siddhant",
+     "due": "before 5 PM today"
+    },
+    {
+     "task": "Sign the document and email it to the Legal Team",
+     "owner": "Siddhant",
+     "due": "before 5 PM today"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_13_code_review_refactoring",
+   "title": "Code Review & Refactoring Sprint",
+   "source": "tts",
+   "duration_sec": 18.5,
+   "asr_sec": 0.79,
+   "llm_sec": 1.09,
+   "total_sec": 1.88,
+   "rtf": 0.101,
+   "wer": 0.0,
+   "cer": 0.0,
+   "hwer": 0.0,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Codebase mein kaafi duplicate audio conversion logic tha across Telegram bot aur web router. Maine common utility function extract kar diya hai. Sabhi developers please new helper use karein aur legacy ffmpeg commands remove kar dein.",
+   "title_out": "Duplicate Audio Conversion Refactoring",
+   "summary": "The codebase had duplicated audio conversion logic across the Telegram bot and web router. A common utility function was created, and developers are instructed to adopt the new helper and eliminate legacy ffmpeg commands.",
+   "action_items": [
+    {
+     "task": "Use the new helper for audio conversion",
+     "owner": null,
+     "due": null
+    },
+    {
+     "task": "Remove legacy ffmpeg commands from the codebase",
+     "owner": null,
+     "due": null
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     1,
+     2
+    ],
+    "supported": [
+     1,
+     2
+    ],
+    "recall": 1.0,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_14_user_feedback_review",
+   "title": "Customer Feedback & Prompt Tuning",
+   "source": "tts",
+   "duration_sec": 19.3,
+   "asr_sec": 0.87,
+   "llm_sec": 1.08,
+   "total_sec": 1.95,
+   "rtf": 0.101,
+   "wer": 4.88,
+   "cer": 2.5,
+   "hwer": 2.44,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "Do users ka feedback aaya tha ki transcript Hindi script mein aa raha tha instead of English letters. Prompt mein Romanized English rule enforce kar diya hai. Priya, agle 3 days tak daily 5 feedback entries monitor karna admin dashboard pe.",
+   "title_out": "User Feedback Monitoring on Transcript Format",
+   "summary": "Users reported that transcripts were appearing in Hindi script instead of Romanized English. The prompt was updated to enforce Romanized English. Priya is assigned to monitor five feedback entries daily on the admin dashboard for the next three days.",
+   "action_items": [
+    {
+     "task": "Monitor five feedback entries daily on the admin dashboard",
+     "owner": "Priya",
+     "due": "next 3 days"
+    }
+   ],
+   "sentiment": "Neutral",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     2
+    ],
+    "supported": [
+     1
+    ],
+    "recall": 0.5,
+    "precision": 1.0,
+    "summary_unsupported_claims": []
+   }
+  },
+  {
+   "id": "test_15_investor_update_summary",
+   "title": "Monthly Investor & Progress Update",
+   "source": "tts",
+   "duration_sec": 19.2,
+   "asr_sec": 0.81,
+   "llm_sec": 1.23,
+   "total_sec": 2.05,
+   "rtf": 0.107,
+   "wer": 12.5,
+   "cer": 9.09,
+   "hwer": 2.5,
+   "transliteration": "llm",
+   "models": [
+    "groq:openai/gpt-oss-120b"
+   ],
+   "hypothesis": "is month humne transcription latency 30 seconds se reduce karke under 2 seconds achieve kar li hai using grok. Total interactions 5000 cross ho chuke hain with zero downtime. Friday tak monthly investor newsletter draft karke send karna hai.",
+   "title_out": "Transcription Latency Improvement",
+   "summary": "The team reduced transcription latency from 30 seconds to under 2 seconds using Grok and processed 5,000 interactions without downtime. A monthly investor newsletter needs to be drafted and sent by Friday.",
+   "action_items": [
+    {
+     "task": "Draft and send the monthly investor newsletter",
+     "owner": "Me",
+     "due": "Friday"
+    }
+   ],
+   "sentiment": "Positive",
+   "judge": {
+    "judge": "groq:qwen/qwen3.8-27b",
+    "covered": [
+     3
+    ],
+    "supported": [
+     1
+    ],
+    "recall": 0.3333333333333333,
+    "precision": 1.0,
+    "summary_unsupported_claims": [
+     "using Grok"
+    ]
+   }
+  }
+ ]
+}

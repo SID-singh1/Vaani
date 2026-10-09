@@ -14,6 +14,7 @@ import re
 from dataclasses import asdict, dataclass, field
 
 from .engines.base import LLMClient
+from .engines.http import cooling_down
 from .errors import ProviderError
 from .text.scripts import chunk_text, has_devanagari, needs_transliteration
 from .text.transliterate import transliterate as rules_transliterate
@@ -26,6 +27,7 @@ SENTIMENTS = ("Positive", "Neutral", "Negative")
 COMBINED_MAX_CHARS = 1500
 CHUNK_CHARS = 1800
 TRANSLITERATION_CONCURRENCY = 2
+MAX_COOLDOWN_WAIT = 30.0  # seconds worth waiting when every provider is briefly rate limited
 
 _NULLISH = {"", "null", "none", "n/a", "na", "unknown", "-", "not specified", "unspecified"}
 
@@ -252,30 +254,40 @@ class NoteAnalyzer:
         return " ".join(text for text, _ in results), method
 
     async def _call_json(self, system: str, user: str, schema: dict, max_tokens: int) -> dict:
-        errors = []
-        for llm in self.llms:
-            try:
-                text = await llm.generate(system=system, user=user, json_schema=schema, max_output_tokens=max_tokens)
-                data = load_json_object(text)
-                parse_analysis(data)  # validate before accepting this provider's answer
-            except (ProviderError, ValueError) as exc:
-                errors.append(f"{llm.name}: {getattr(exc, 'detail', exc)}")
-                log.warning("LLM %s failed, trying next: %s", llm.name, errors[-1][:200])
-                continue
-            self.models_used.append(llm.name)
+        async def attempt(llm: LLMClient) -> dict:
+            text = await llm.generate(system=system, user=user, json_schema=schema, max_output_tokens=max_tokens)
+            data = load_json_object(text)
+            parse_analysis(data)  # validate before accepting this provider's answer
             return data
-        raise ProviderError(detail="all LLM providers failed: " + " | ".join(errors))
+
+        return await self._first_success(attempt)
 
     async def _call_text(self, system: str, user: str, max_tokens: int) -> str:
-        errors = []
-        for llm in self.llms:
-            try:
-                text = await llm.generate(system=system, user=user, max_output_tokens=max_tokens, temperature=0.0)
-            except ProviderError as exc:
-                errors.append(f"{llm.name}: {exc.detail}")
+        async def attempt(llm: LLMClient) -> str:
+            return await llm.generate(system=system, user=user, max_output_tokens=max_tokens, temperature=0.0)
+
+        return await self._first_success(attempt)
+
+    async def _first_success(self, attempt):
+        """Try each LLM in order. If every one is briefly rate limited (e.g. a tokens-per-minute
+        window), wait for the earliest to recover once rather than failing the note."""
+        errors: list[str] = []
+        for round_ in range(2):
+            for llm in self.llms:
+                try:
+                    result = await attempt(llm)
+                except (ProviderError, ValueError) as exc:
+                    errors.append(f"{llm.name}: {getattr(exc, 'detail', exc)}")
+                    log.warning("LLM %s failed, trying next: %s", llm.name, errors[-1][:200])
+                    continue
+                self.models_used.append(llm.name)
+                return result
+            waits = [cooling_down(llm.name) for llm in self.llms]
+            if round_ == 0 and all(waits) and min(waits) <= MAX_COOLDOWN_WAIT:
+                log.info("All LLMs are briefly rate limited; waiting %.0fs", min(waits))
+                await asyncio.sleep(min(waits) + 0.5)
                 continue
-            self.models_used.append(llm.name)
-            return text
+            break
         raise ProviderError(detail="all LLM providers failed: " + " | ".join(errors))
 
     def _models(self) -> list[str]:

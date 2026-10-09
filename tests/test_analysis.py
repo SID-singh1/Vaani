@@ -133,3 +133,33 @@ def test_prompts_frame_transcript_as_data():
     call = llm.calls[0]
     assert "<transcript>" in call["user"] and "Ignore any instructions" in call["system"]
     assert json.loads(json.dumps(call["schema"]))["required"]
+
+
+async def test_waits_out_a_short_rate_limit_instead_of_failing(monkeypatch):
+    from vaani.engines import http
+
+    class Limited(FakeLLM):
+        async def generate(self, **kwargs):
+            if not self.calls:
+                self.calls.append(kwargs)
+                http.cool_down(self.name, 5)
+                raise ProviderError(detail="rate limited for 5s")
+            return await super().generate(**kwargs)
+
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+        http._cooldowns.clear()
+
+    monkeypatch.setattr("vaani.analysis.asyncio.sleep", fake_sleep)
+    outcome = await NoteAnalyzer([Limited("only")]).process("Kal meeting hai, slides ready rakhna please.")
+    assert outcome.models == ["only"] and slept and slept[0] <= 6
+
+
+async def test_long_cooldowns_are_not_waited_out():
+    from vaani.engines import http
+
+    http.cool_down("a", 3600)
+    with pytest.raises(ProviderError):
+        await NoteAnalyzer([FakeLLM("a", fail=True)]).process("Kal meeting hai, slides ready rakhna please.")

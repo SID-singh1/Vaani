@@ -21,32 +21,99 @@ import re
 
 import jiwer
 
-_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+_ONES = [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+]
 _TENS = ["_", "_", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
 
 _COMPOUNDS = {
-    "front end": "frontend", "back end": "backend", "e mail": "email", "log in": "login",
-    "on line": "online", "off line": "offline", "feed back": "feedback", "screen shot": "screenshot",
-    "screen shots": "screenshots", "time out": "timeout", "up date": "update", "dead line": "deadline",
+    "front end": "frontend",
+    "back end": "backend",
+    "e mail": "email",
+    "log in": "login",
+    "on line": "online",
+    "off line": "offline",
+    "feed back": "feedback",
+    "screen shot": "screenshot",
+    "screen shots": "screenshots",
+    "time out": "timeout",
+    "up date": "update",
+    "dead line": "deadline",
 }
 
 # Frequent Romanized-Hindi spelling variants -> one canonical form (applied after lowercasing).
 _VARIANTS = {
-    "toh": "to", "nahin": "nahi", "nhi": "nahi", "kia": "kya", "kyon": "kyun", "kyu": "kyun", "kyunki": "kyunki",
-    "kyonki": "kyunki", "achha": "acha", "accha": "acha", "achcha": "acha", "acchha": "acha", "theek": "thik",
-    "tik": "thik", "han": "haan", "yeh": "ye", "woh": "wo", "vo": "wo", "hamein": "hume", "humein": "hume",
-    "hamen": "hume", "usmein": "usme", "isme": "isme", "ismein": "isme", "dikhein": "dikhe", "dikhen": "dikhe",
-    "jaaye": "jaye", "jae": "jaye", "hoon": "hu", "hun": "hu", "rha": "raha", "rhe": "rahe", "rhi": "rahi",
-    "bohot": "bahut", "bhot": "bahut", "kuchh": "kuch", "pehle": "pahle", "mai": "main", "mujhko": "mujhe",
-    "karunga": "karunga", "karoonga": "karunga", "kr": "kar", "krna": "karna", "hy": "hai", "he": "he",
+    "toh": "to",
+    "nahin": "nahi",
+    "nhi": "nahi",
+    "kia": "kya",
+    "kyon": "kyun",
+    "kyu": "kyun",
+    "kyunki": "kyunki",
+    "kyonki": "kyunki",
+    "achha": "acha",
+    "accha": "acha",
+    "achcha": "acha",
+    "acchha": "acha",
+    "theek": "thik",
+    "tik": "thik",
+    "han": "haan",
+    "yeh": "ye",
+    "woh": "wo",
+    "vo": "wo",
+    "hamein": "hume",
+    "humein": "hume",
+    "hamen": "hume",
+    "usmein": "usme",
+    "ismein": "isme",
+    "dikhein": "dikhe",
+    "dikhen": "dikhe",
+    "jaaye": "jaye",
+    "jae": "jaye",
+    "hoon": "hu",
+    "hun": "hu",
+    "rha": "raha",
+    "rhe": "rahe",
+    "rhi": "rahi",
+    "bohot": "bahut",
+    "bhot": "bahut",
+    "kuchh": "kuch",
+    "pehle": "pahle",
+    "mai": "main",
+    "mujhko": "mujhe",
+    "karoonga": "karunga",
+    "kr": "kar",
+    "krna": "karna",
+    "hy": "hai",
 }
 
-_basic = jiwer.Compose([
-    jiwer.ToLowerCase(),
-    jiwer.RemovePunctuation(),
-    jiwer.RemoveMultipleSpaces(),
-    jiwer.Strip(),
-])
+_basic = jiwer.Compose(
+    [
+        jiwer.ToLowerCase(),
+        jiwer.RemovePunctuation(),
+        jiwer.RemoveMultipleSpaces(),
+        jiwer.Strip(),
+    ]
+)
 
 
 def number_to_words(n: int) -> str:

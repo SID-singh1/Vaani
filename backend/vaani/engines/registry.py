@@ -53,24 +53,30 @@ class EngineRegistry:
             await close()
 
 
+def make_llm(spec: str, settings: Settings, http: httpx.AsyncClient) -> LLMClient | None:
+    """Build a client from "provider:model" (gemini:... or groq:...); None if its key is missing."""
+    provider, _, model = spec.partition(":")
+    if provider == "gemini" and settings.gemini_api_key:
+        return GeminiClient(settings.gemini_api_key, model, http)
+    if provider == "groq" and settings.groq_api_key:
+        extra = {"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {}
+        if model.startswith("qwen/"):
+            extra = {"reasoning_format": "hidden"}  # keep <think> text out of JSON answers
+        return ChatCompletionsClient(
+            name=f"groq:{model}",
+            base_url=GROQ_OPENAI_BASE,
+            model=model,
+            http=http,
+            api_key=settings.groq_api_key,
+            extra_body=extra,
+        )
+    if provider not in ("gemini", "groq"):
+        log.warning("Ignoring unknown LLM %r in LLM_CHAIN (use gemini:<model> or groq:<model>)", spec)
+    return None
+
+
 def _cloud_llms(settings: Settings, http: httpx.AsyncClient) -> list[LLMClient]:
-    llms: list[LLMClient] = []
-    if settings.gemini_api_key:
-        llms += [GeminiClient(settings.gemini_api_key, model, http) for model in settings.gemini_models]
-    if settings.groq_api_key:
-        for model in settings.groq_llm_models:
-            extra = {"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {}
-            llms.append(
-                ChatCompletionsClient(
-                    name=f"groq:{model}",
-                    base_url=GROQ_OPENAI_BASE,
-                    model=model,
-                    http=http,
-                    api_key=settings.groq_api_key,
-                    extra_body=extra,
-                )
-            )
-    return llms
+    return [llm for spec in settings.llm_chain if (llm := make_llm(spec, settings, http)) is not None]
 
 
 def build_registry(settings: Settings, http: httpx.AsyncClient) -> EngineRegistry:
@@ -78,7 +84,7 @@ def build_registry(settings: Settings, http: httpx.AsyncClient) -> EngineRegistr
     closers = []
     settings.temp_dir.mkdir(parents=True, exist_ok=True)
 
-    if settings.cloud_configured:
+    if settings.cloud_configured and _cloud_llms(settings, http):
         engines["cloud"] = Engine(
             name="cloud",
             label="Fast",

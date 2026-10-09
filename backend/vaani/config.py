@@ -15,6 +15,10 @@ WEB_DIR = REPO_ROOT / "web"
 
 log = logging.getLogger(__name__)
 
+DEFAULT_LLM_CHAIN = (
+    "gemini:gemini-2.5-flash,gemini:gemini-3.5-flash,groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite"
+)
+
 
 def _str(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
@@ -54,8 +58,9 @@ class Settings:
     gemini_api_key: str = ""
     groq_asr_model: str = "whisper-large-v3"
     groq_asr_language: str = ""
-    gemini_models: list[str] = field(default_factory=list)
-    groq_llm_models: list[str] = field(default_factory=list)
+    # Tried in order; each model has its own free quota, so capacity is the sum. Chosen by
+    # evaluation/benchmark_report.md: best action-item recall first, high-quota Groq model as the workhorse.
+    llm_chain: list[str] = field(default_factory=list)
     cloud_concurrency: int = 3
     max_audio_seconds_cloud: int = 30 * 60
 
@@ -105,7 +110,7 @@ class Settings:
 
     @property
     def cloud_configured(self) -> bool:
-        return bool(self.groq_api_key) and bool(self.gemini_api_key or self.groq_llm_models)
+        return bool(self.groq_api_key) and bool(self.llm_chain)
 
     @property
     def whatsapp_enabled(self) -> bool:
@@ -169,8 +174,7 @@ def load_settings() -> Settings:
         gemini_api_key=_str("GEMINI_API_KEY"),
         groq_asr_model=_str("GROQ_ASR_MODEL", "whisper-large-v3"),
         groq_asr_language=_str("GROQ_ASR_LANGUAGE"),
-        gemini_models=_list("GEMINI_MODELS", "gemini-2.5-flash,gemini-3.5-flash-lite"),
-        groq_llm_models=_list("GROQ_LLM_MODELS", "openai/gpt-oss-120b"),
+        llm_chain=_list("LLM_CHAIN", DEFAULT_LLM_CHAIN),
         cloud_concurrency=_int("CLOUD_CONCURRENCY", 3),
         max_audio_seconds_cloud=_int("MAX_AUDIO_SECONDS_CLOUD", 30 * 60),
         private_engine_enabled=_bool("PRIVATE_ENGINE_ENABLED", False),
