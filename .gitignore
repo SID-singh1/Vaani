@@ -56,3 +56,6 @@ dev.db
 
 # Database backups contain user data
 backups/
+
+# Claude Code / editor-local settings
+.claude/
