@@ -1,5 +1,9 @@
 """Domain errors.
 
+User-facing wording policy: say plainly when the *user* hit a limit or the service is down;
+for every other failure show a calm "high traffic" message. The real cause is always in `detail`
+(logged, never shown).
+
 Every error carries a message that is safe to show to end users (web, Telegram, WhatsApp).
 Internal details go in `detail`, which is logged but never returned to clients.
 """
@@ -10,7 +14,7 @@ from __future__ import annotations
 class VaaniError(Exception):
     status_code = 500
     code = "internal_error"
-    user_message = "Something went wrong on our side. Please try again in a moment."
+    user_message = "Vaani is getting a lot of traffic right now. Please try again in a minute."
 
     def __init__(self, user_message: str | None = None, *, detail: str | None = None):
         if user_message:
@@ -55,7 +59,7 @@ class QuotaExceeded(VaaniError):
 class EngineUnavailable(VaaniError):
     status_code = 503
     code = "engine_unavailable"
-    user_message = "That processing mode isn't available on this server right now."
+    user_message = "That mode is temporarily unavailable. Please try again shortly."
 
 
 class ProviderError(VaaniError):
@@ -63,7 +67,7 @@ class ProviderError(VaaniError):
 
     status_code = 502
     code = "provider_error"
-    user_message = "The AI service is busy right now. Please try again in a minute."
+    user_message = "Vaani is getting a lot of traffic right now. Please try again in a minute."
 
     def __init__(self, user_message: str | None = None, *, detail: str | None = None, retryable: bool = True):
         super().__init__(user_message, detail=detail)

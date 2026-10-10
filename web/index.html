@@ -144,13 +144,13 @@
 
                 <div class="toolbar">
                     <div class="rating">
-                        <span>Accurate?</span>
-                        <button class="rate-btn up" id="rateUp" aria-label="Accurate"><i class="fa-regular fa-thumbs-up"></i></button>
-                        <button class="rate-btn down" id="rateDown" aria-label="Inaccurate"><i class="fa-regular fa-thumbs-down"></i></button>
+                        <span>Useful?</span>
+                        <button class="rate-btn up" id="rateUp" aria-label="Useful"><i class="fa-regular fa-thumbs-up"></i></button>
+                        <button class="rate-btn down" id="rateDown" aria-label="Not useful"><i class="fa-regular fa-thumbs-down"></i></button>
                     </div>
                     <div class="toolbar-group">
-                        <button class="btn btn-sm" id="copyBtn"><i class="fa-regular fa-copy"></i> Copy</button>
-                        <button class="btn btn-sm" id="downloadBtn"><i class="fa-solid fa-download"></i> .md</button>
+                        <button class="btn btn-sm" id="copyBtn" title="Copy the summary, action items and transcript, ready to paste into WhatsApp, email or Notion"><i class="fa-regular fa-copy"></i> Copy note</button>
+                        <button class="btn btn-sm" id="downloadBtn" title="Download the note as a Markdown (.md) text file: opens in any text editor, Notion or Obsidian, with action items as a checklist"><i class="fa-solid fa-download"></i> Download</button>
                         <button class="btn btn-sm btn-danger" id="deleteBtn"><i class="fa-regular fa-trash-can"></i> Delete</button>
                         <button class="btn btn-sm btn-primary" id="anotherBtn"><i class="fa-solid fa-plus"></i> New note</button>
                     </div>
@@ -161,6 +161,15 @@
 </div>
 
 <div class="toast" id="toast" role="status"></div>
+
+<dialog id="confirmDialog">
+    <h3 id="confirmTitle"></h3>
+    <p id="confirmText"></p>
+    <div class="dialog-actions">
+        <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+        <button class="btn btn-danger-solid" id="confirmOk">Delete</button>
+    </div>
+</dialog>
 
 <dialog id="feedbackDialog">
     <h3>Send feedback</h3>

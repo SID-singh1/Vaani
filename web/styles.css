@@ -164,6 +164,8 @@ button { font-family: inherit; }
 .btn-ghost { background: transparent; color: var(--muted); }
 .btn-ghost:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 .btn-danger:hover:not(:disabled) { color: #fca5a5; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); }
+.btn-danger-solid { background: var(--danger); border-color: transparent; color: #fff; }
+.btn-danger-solid:hover:not(:disabled) { background: #dc2626; }
 .btn-sm { padding: 6px 12px; font-size: 0.85rem; border-radius: var(--radius-sm); }
 .icon-btn {
     width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255, 255, 255, 0.05);

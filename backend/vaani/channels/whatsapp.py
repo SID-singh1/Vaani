@@ -69,6 +69,8 @@ def _view(note: Interaction) -> NoteView:
         action_items=note.action_items_list(),
         sentiment=note.sentiment or "Neutral",
         transcript=note.transcript or "",
+        audio_duration_sec=note.audio_duration_sec,
+        total_ms=note.total_ms,
     )
 
 
@@ -153,7 +155,7 @@ class WhatsAppChannel:
             await self.send_text(wa_id, f"⚠️ {exc.user_message}")
         except Exception:
             log.exception("WhatsApp message handling failed")
-            await self.send_text(wa_id, "⚠️ Something went wrong on my side. Please try again.")
+            await self.send_text(wa_id, "⚠️ Vaani is getting a lot of traffic right now. Please try again in a minute.")
 
     async def _on_text(self, wa_id: str, user_id: str, message_id: str, body: str) -> None:
         text = body.strip()
@@ -257,7 +259,9 @@ class WhatsAppChannel:
             return  # duplicate delivery of a message we already handled
         await self.ctx.jobs.wait_until_done(job)
         if job.status != NoteStatus.DONE:
-            await self.send_text(wa_id, f"⚠️ {job.error or 'Something went wrong. Please try again.'}")
+            await self.send_text(
+                wa_id, f"⚠️ {job.error or 'Vaani is getting a lot of traffic right now. Please try again in a minute.'}"
+            )
             return
         note = await self.ctx.db.run(repo.get_note, job.id)
         await self.send_result(wa_id, note)
@@ -266,8 +270,8 @@ class WhatsAppChannel:
         body = format_note_whatsapp(_view(note))
         buttons = [
             (f"tr:{note.id}", "📄 Transcript"),
-            (f"rate:up:{note.id}", "👍 Accurate"),
-            (f"rate:down:{note.id}", "👎 Inaccurate"),
+            (f"rate:up:{note.id}", "👍 Useful"),
+            (f"rate:down:{note.id}", "👎 Not useful"),
         ]
         if len(body) <= BUTTON_BODY_LIMIT:
             await self.send_buttons(wa_id, body, buttons)

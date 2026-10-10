@@ -1,199 +1,222 @@
 import React, { useEffect, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { Bot, ShieldAlert, Zap, ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Mic, Lock, Code } from 'lucide-react';
 import './index.css';
 
-function App() {
-  const telegramLink = "https://t.me/Vaani_hinglish_bot";
-  // Set VITE_APP_URL (e.g. in marketing/.env.production) to show the "Open web app" button.
-  const webAppLink = import.meta.env.VITE_APP_URL;
-  
-  // Custom Cursor Logic
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [isHovering, setIsHovering] = useState(false);
-  
+const TELEGRAM = 'https://t.me/Vaani_hinglish_bot';
+const GITHUB = 'https://github.com/SID-singh1/Vaani';
+// Set VITE_APP_URL (e.g. in marketing/.env.production) to link the web app and privacy page.
+const WEB_APP = import.meta.env.VITE_APP_URL;
+
+const EXAMPLE_ACTIONS = [
+  { task: 'Update the pricing deck', owner: 'Amit', due: 'tonight' },
+  { task: 'Check the login bug on the demo environment', owner: 'Sneha', due: null },
+  { task: 'Email the client the agenda', owner: 'You', due: 'tomorrow morning' },
+];
+
+function useFinePointer() {
+  const [fine, setFine] = useState(() => window.matchMedia('(pointer: fine)').matches);
   useEffect(() => {
-    const updateMousePosition = (e) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', updateMousePosition);
-    return () => window.removeEventListener('mousemove', updateMousePosition);
+    const query = window.matchMedia('(pointer: fine)');
+    const onChange = (e) => setFine(e.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
   }, []);
+  return fine;
+}
 
-  // Scroll Animations
-  const { scrollYProgress } = useScroll();
-  const yBg = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
-  const opacityHero = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
-  const scaleHero = useTransform(scrollYProgress, [0, 0.2], [1, 0.8]);
-
-  // Marquee Animation
-  const marqueeVariants = {
-    animate: {
-      x: [0, -1000],
-      transition: { x: { repeat: Infinity, repeatType: "loop", duration: 10, ease: "linear" } }
-    }
-  };
-
+function Cursor({ hovering }) {
+  const [pos, setPos] = useState({ x: -100, y: -100 });
+  useEffect(() => {
+    const move = (e) => setPos({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', move);
+    return () => window.removeEventListener('mousemove', move);
+  }, []);
   return (
     <>
-      {/* Custom Cursor */}
-      <motion.div 
-        className="cursor-dot" 
-        animate={{ left: mousePosition.x, top: mousePosition.y }}
-        transition={{ type: "tween", ease: "backOut", duration: 0.1 }}
-      />
-      <motion.div 
-        className="cursor-outline" 
-        animate={{ 
-          left: mousePosition.x, 
-          top: mousePosition.y,
-          width: isHovering ? 80 : 40,
-          height: isHovering ? 80 : 40,
-          borderColor: isHovering ? 'var(--neon-yellow)' : 'var(--neon-pink)'
-        }}
-        transition={{ type: "tween", ease: "backOut", duration: 0.15 }}
-      />
-
-      {/* Animated Background Blobs */}
-      <div className="bg-blob blob-1"></div>
-      <div className="bg-blob blob-2"></div>
-      
-      <div className="container">
-        {/* Hero Section */}
-        <motion.section 
-          className="hero"
-          style={{ opacity: opacityHero, scale: scaleHero, y: yBg }}
-        >
-          <motion.h1 
-            className="hero-title"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 1, type: "spring", bounce: 0.4 }}
-          >
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-            >
-              <span className="glitch" data-text="Voice AI">Voice AI</span> <br/> 
-              <span className="text-stroke">Reimagined.</span>
-            </motion.div>
-          </motion.h1>
-          
-          <motion.p 
-            className="hero-subtitle"
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 1, delay: 0.2 }}
-          >
-            Send a Hindi, English or Hinglish voice note. Get a summary, who-does-what action items
-            and a clean Hinglish transcript in seconds.
-          </motion.p>
-          
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-          >
-            <a 
-              href={telegramLink} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="cyber-button"
-              onMouseEnter={() => setIsHovering(true)}
-              onMouseLeave={() => setIsHovering(false)}
-            >
-              Try on Telegram <ArrowUpRight />
-            </a>
-            {webAppLink && (
-              <a
-                href={webAppLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="cyber-button"
-                style={{ marginLeft: '1rem' }}
-                onMouseEnter={() => setIsHovering(true)}
-                onMouseLeave={() => setIsHovering(false)}
-              >
-                Open web app <ArrowUpRight />
-              </a>
-            )}
-          </motion.div>
-        </motion.section>
-
-        {/* Features Section */}
-        <section className="features-section">
-          {/* Marquee */}
-          <div className="marquee-container">
-            <motion.div className="marquee-text" variants={marqueeVariants} animate="animate">
-              INSTANT HINGLISH RECOGNITION • INTELLIGENT SUMMARIES • SEAMLESS TELEGRAM INTEGRATION • INSTANT HINGLISH RECOGNITION • INTELLIGENT SUMMARIES • SEAMLESS TELEGRAM INTEGRATION • 
-            </motion.div>
-          </div>
-
-          <div className="feature-grid">
-            {/* Feature 1 */}
-            <motion.div 
-              className="feature-row"
-              initial={{ opacity: 0, x: -100, rotateY: 45, scale: 0.8 }}
-              whileInView={{ opacity: 1, x: 0, rotateY: 0, scale: 1 }}
-              viewport={{ once: false, margin: "-20%" }}
-              transition={{ duration: 1, type: "spring", bounce: 0.5 }}
-            >
-              <div className="feature-content">
-                <div className="feature-number">01</div>
-                <h2 className="feature-title">Fast <br/> Mode</h2>
-                <p className="feature-desc">Whisper large-v3 on Groq plus Gemini, with automatic failover between models. A 3-minute voice note comes back in about 13 seconds.</p>
-              </div>
-              <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
-                <ShieldAlert className="visual-icon pink" />
-              </div>
-            </motion.div>
-
-            {/* Feature 2 */}
-            <motion.div 
-              className="feature-row reverse"
-              initial={{ opacity: 0, x: 100, rotateX: 45, scale: 0.8 }}
-              whileInView={{ opacity: 1, x: 0, rotateX: 0, scale: 1 }}
-              viewport={{ once: false, margin: "-20%" }}
-              transition={{ duration: 1, type: "spring", bounce: 0.5 }}
-            >
-              <div className="feature-content">
-                <div className="feature-number">02</div>
-                <h2 className="feature-title">Built for <br/> Hinglish</h2>
-                <p className="feature-desc">Code-switched speech becomes a readable Romanized Hinglish transcript, and action items come out in English with the owner and the deadline.</p>
-              </div>
-              <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
-                <Bot className="visual-icon cyan" />
-              </div>
-            </motion.div>
-
-            {/* Feature 3 */}
-            <motion.div 
-              className="feature-row"
-              initial={{ opacity: 0, y: 150, rotateZ: -10, scale: 0.8 }}
-              whileInView={{ opacity: 1, y: 0, rotateZ: 0, scale: 1 }}
-              viewport={{ once: false, margin: "-20%" }}
-              transition={{ duration: 1, type: "spring", bounce: 0.5 }}
-            >
-              <div className="feature-content">
-                <div className="feature-number">03</div>
-                <h2 className="feature-title">Private <br/> Mode</h2>
-                <p className="feature-desc">Open source and self-hostable: a quantized Whisper and a local LLM run entirely on your own machine, so audio never reaches an AI company.</p>
-              </div>
-              <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
-                <Zap className="visual-icon" />
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer>
-          <h2 className="footer-logo">VAANI</h2>
-          <p>Engineered for the future.</p>
-        </footer>
-      </div>
+      <motion.div className="cursor-dot" animate={{ left: pos.x, top: pos.y }}
+        transition={{ type: 'tween', ease: 'backOut', duration: 0.1 }} />
+      <motion.div className="cursor-outline"
+        animate={{ left: pos.x, top: pos.y, width: hovering ? 80 : 40, height: hovering ? 80 : 40,
+          borderColor: hovering ? 'var(--neon-yellow)' : 'var(--neon-pink)' }}
+        transition={{ type: 'tween', ease: 'backOut', duration: 0.15 }} />
     </>
   );
 }
 
-export default App;
+function Chips({ owner, due }) {
+  return (
+    <span className="chips">
+      {owner && <span className="chip">👤 {owner}</span>}
+      {due && <span className="chip due">⏰ {due}</span>}
+    </span>
+  );
+}
+
+function DemoCard() {
+  return (
+    <motion.div className="demo" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8, delay: 0.5 }}>
+      <div className="bubble">
+        <Mic size={18} /> <span className="wave" aria-hidden="true" /> <span>2:54</span>
+        <p className="bubble-text">
+          "Kal client ke saath call hai 4 baje. Amit tu pricing deck update kar dena by tonight,
+          aur Sneha please demo pe login wala bug check kar lena…"
+        </p>
+      </div>
+      <div className="arrow-down" aria-hidden="true">↓ ready in 9s</div>
+      <div className="note-card">
+        <div className="note-title">📝 Client call prep</div>
+        <p className="note-summary">Client call tomorrow at 4 PM. The deck needs updated pricing and the demo's
+          login bug must be checked before then.</p>
+        <ul className="note-actions">
+          {EXAMPLE_ACTIONS.map((a) => (
+            <li key={a.task}><span className="check" aria-hidden="true" />{a.task} <Chips owner={a.owner} due={a.due} /></li>
+          ))}
+        </ul>
+      </div>
+    </motion.div>
+  );
+}
+
+const FEATURES = [
+  {
+    n: '01', title: ['Minutes of audio,', 'seconds to read'], tone: 'cyan',
+    desc: 'Forward a long voice note and get the gist before you could have played the first minute. A 3-minute note is usually ready in under 15 seconds.',
+    visual: (
+      <div className="vis-speed">
+        <div className="speed-row"><span>🎧 Listening</span><span className="speed-bar slow" /><b>2m 54s</b></div>
+        <div className="speed-row"><span>⚡ Vaani</span><span className="speed-bar fast" /><b>9s</b></div>
+      </div>
+    ),
+  },
+  {
+    n: '02', title: ['Speaks', 'Hinglish'], tone: 'pink',
+    desc: 'Talk the way you actually talk, switching between Hindi and English mid-sentence. You get a readable Romanized transcript and clean English action items with who and by when.',
+    visual: (
+      <div className="vis-hinglish">
+        <p className="hinglish-in">"Amit tu pricing deck update kar dena by tonight"</p>
+        <span className="arrow">→</span>
+        <p className="hinglish-out">Update the pricing deck <Chips owner="Amit" due="tonight" /></p>
+      </div>
+    ),
+  },
+  {
+    n: '03', title: ['Private', 'by design'], tone: 'yellow',
+    desc: 'Audio is deleted as soon as it is transcribed, and you can wipe your notes any time. Want zero third parties? Vaani is open source: self-host it and run speech and AI fully on your own machine.',
+    visual: (
+      <div className="vis-private">
+        <Lock size={64} />
+        <p>Audio deleted after transcription</p>
+        <p>/delete removes your notes for good</p>
+        <p>Self-host: nothing leaves your machine</p>
+      </div>
+    ),
+  },
+];
+
+const STEPS = [
+  { title: 'Send', text: 'Record, forward a WhatsApp voice note, upload a file or paste text.' },
+  { title: 'Vaani listens', text: 'It transcribes your Hindi, English or Hinglish and works out what matters.' },
+  { title: 'You act', text: 'Summary, action items with owners and deadlines, and the full transcript.' },
+];
+
+export default function App() {
+  const finePointer = useFinePointer();
+  const [hovering, setHovering] = useState(false);
+  const hover = finePointer ? { onMouseEnter: () => setHovering(true), onMouseLeave: () => setHovering(false) } : {};
+  const { scrollYProgress } = useScroll();
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.18], [1, 0.2]);
+
+  return (
+    <div className={finePointer ? 'custom-cursor' : ''}>
+      {finePointer && <Cursor hovering={hovering} />}
+      <div className="bg-blob blob-1" />
+      <div className="bg-blob blob-2" />
+
+      <div className="container">
+        <motion.section className="hero" style={{ opacity: heroOpacity }}>
+          <div className="hero-copy">
+            <motion.h1 className="hero-title" initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 1, type: 'spring', bounce: 0.4 }}>
+              <span className="glitch" data-text="Voice notes,">Voice notes,</span><br />
+              <span className="text-stroke">sorted.</span>
+            </motion.h1>
+            <motion.p className="hero-subtitle" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 1, delay: 0.2 }}>
+              Send a voice note in Hindi, English or Hinglish. Get a summary, who-does-what action items
+              and a clean transcript in seconds.
+            </motion.p>
+            <motion.div className="cta-row" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.4 }}>
+              <a href={TELEGRAM} target="_blank" rel="noopener noreferrer" className="cyber-button" {...hover}>
+                Try on Telegram <ArrowUpRight />
+              </a>
+              {WEB_APP && (
+                <a href={WEB_APP} target="_blank" rel="noopener noreferrer" className="cyber-button ghost" {...hover}>
+                  Open web app <ArrowUpRight />
+                </a>
+              )}
+            </motion.div>
+            <p className="hero-note">Free · no sign-up · WhatsApp coming soon</p>
+          </div>
+          <DemoCard />
+        </motion.section>
+
+        <section className="features-section">
+          <div className="marquee-container" aria-hidden="true">
+            <motion.div className="marquee-text" animate={{ x: [0, -1000] }}
+              transition={{ x: { repeat: Infinity, repeatType: 'loop', duration: 12, ease: 'linear' } }}>
+              HINGLISH · SUMMARIES · ACTION ITEMS · TELEGRAM · WEB · HINGLISH · SUMMARIES · ACTION ITEMS ·
+            </motion.div>
+          </div>
+
+          <div className="feature-grid">
+            {FEATURES.map((f, i) => (
+              <motion.div key={f.n} className={`feature-row${i % 2 ? ' reverse' : ''}`}
+                initial={{ opacity: 0, y: 80 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-15%' }} transition={{ duration: 0.8, type: 'spring', bounce: 0.3 }}>
+                <div className="feature-content">
+                  <div className="feature-number">{f.n}</div>
+                  <h2 className="feature-title">{f.title[0]}<br />{f.title[1]}</h2>
+                  <p className="feature-desc">{f.desc}</p>
+                </div>
+                <div className={`feature-visual tone-${f.tone}`} {...hover}>{f.visual}</div>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+
+        <section className="steps-section">
+          <h2 className="section-title">How it works</h2>
+          <div className="steps">
+            {STEPS.map((s, i) => (
+              <motion.div key={s.title} className="step" initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.15 }}>
+                <span className="step-n">{i + 1}</span>
+                <h3>{s.title}</h3>
+                <p>{s.text}</p>
+              </motion.div>
+            ))}
+          </div>
+          <div className="cta-row center">
+            <a href={TELEGRAM} target="_blank" rel="noopener noreferrer" className="cyber-button" {...hover}>
+              Send your first note <ArrowUpRight />
+            </a>
+          </div>
+        </section>
+
+        <footer>
+          <h2 className="footer-logo">VAANI</h2>
+          <nav className="footer-links">
+            <a href={TELEGRAM} target="_blank" rel="noopener noreferrer">Telegram</a>
+            {WEB_APP && <a href={WEB_APP} target="_blank" rel="noopener noreferrer">Web app</a>}
+            {WEB_APP && <a href={`${WEB_APP.replace(/\/$/, '')}/privacy`} target="_blank" rel="noopener noreferrer">Privacy</a>}
+            <a href={GITHUB} target="_blank" rel="noopener noreferrer"><Code size={16} /> Open source</a>
+          </nav>
+          <p>Made in India for the way India talks.</p>
+        </footer>
+      </div>
+    </div>
+  );
+}

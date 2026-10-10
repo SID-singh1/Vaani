@@ -98,7 +98,7 @@ async def test_failure_is_recorded_with_safe_message(tmp_path):
         await manager.wait_until_done(job, timeout=5)
         stored = await db.run(repo.get_note, job.id)
         assert job.status == NoteStatus.FAILED == stored.status
-        assert "busy" in stored.error_message and "fake-llm" not in stored.error_message
+        assert "traffic" in stored.error_message and "fake-llm" not in stored.error_message
     finally:
         await manager.stop()
 

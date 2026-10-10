@@ -6,6 +6,8 @@ const $ = (id) => document.getElementById(id);
 const TOKEN_KEY = 'vaani_token';
 const LEGACY_ID_KEY = 'vaani_user_id';
 const STEPS = ['upload', 'queued', 'transcribing', 'analyzing'];
+const BUSY_MESSAGE = 'Vaani is getting a lot of traffic right now. Please try again in a minute.';
+const OFFLINE_MESSAGE = "Can't reach Vaani right now. It may be briefly down; please try again in a minute.";
 
 const state = {
     me: null,
@@ -55,6 +57,42 @@ function formatDuration(seconds) {
     return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
 }
 
+// Model output says "Me" for tasks the speaker took on; the reader is that speaker.
+function displayOwner(owner) {
+    return ['me', 'i', 'myself', 'speaker', 'the speaker', 'self'].includes(owner.trim().toLowerCase()) ? 'You' : owner;
+}
+
+// "2m 54s voice note → ready in 9s": the time Vaani saves.
+function turnaround(note) {
+    const ms = note.timings?.total_ms;
+    if (!ms) return note.source === 'text' ? 'from text' : '';
+    const ready = `ready in ${Math.max(1, Math.round(ms / 1000))}s`;
+    return note.audio_duration_sec ? `${formatDuration(note.audio_duration_sec)} voice note → ${ready}` : `text → ${ready}`;
+}
+
+// Themed replacement for window.confirm(); resolves true when the user confirms.
+function confirmDialog(title, message, confirmLabel) {
+    const dialog = $('confirmDialog');
+    $('confirmTitle').textContent = title;
+    $('confirmText').textContent = message;
+    $('confirmOk').textContent = confirmLabel;
+    dialog.showModal();
+    return new Promise((resolve) => {
+        const finish = (value) => {
+            $('confirmOk').removeEventListener('click', ok);
+            $('confirmCancel').removeEventListener('click', cancel);
+            dialog.removeEventListener('cancel', cancel);
+            if (dialog.open) dialog.close();
+            resolve(value);
+        };
+        const ok = () => finish(true);
+        const cancel = () => finish(false);
+        $('confirmOk').addEventListener('click', ok);
+        $('confirmCancel').addEventListener('click', cancel);
+        dialog.addEventListener('cancel', cancel);
+    });
+}
+
 function formatDate(iso) {
     if (!iso) return '';
     const date = new Date(iso);
@@ -97,7 +135,7 @@ async function api(path, { method = 'GET', json, form, retry = true } = {}) {
         return api(path, { method, json, form, retry: false });
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(data?.error?.message || `Request failed (${res.status})`, res.status);
+    if (!res.ok) throw new ApiError(data?.error?.message || BUSY_MESSAGE, res.status);
     return data;
 }
 
@@ -115,9 +153,9 @@ function uploadNote(form, onProgress) {
             try { data = JSON.parse(xhr.responseText); } catch (_) { /* non-JSON */ }
             if (xhr.status === 401) { storage(TOKEN_KEY, null); reject(new ApiError('Session expired. Please try again.', 401)); }
             else if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-            else reject(new ApiError(data?.error?.message || `Upload failed (${xhr.status})`, xhr.status));
+            else reject(new ApiError(data?.error?.message || BUSY_MESSAGE, xhr.status));
         };
-        xhr.onerror = () => reject(new ApiError('Network error. Check your connection and try again.', 0));
+        xhr.onerror = () => reject(new ApiError(OFFLINE_MESSAGE, 0));
         xhr.send(form);
     });
 }
@@ -261,7 +299,7 @@ function openNote(note) {
 }
 
 async function deleteNote(id) {
-    if (!confirm('Delete this note permanently?')) return;
+    if (!await confirmDialog('Delete this note?', 'It will be removed permanently, including its transcript.', 'Delete')) return;
     try {
         await api(`/api/v1/notes/${encodeURIComponent(id)}`, { method: 'DELETE' });
         state.notes = state.notes.filter((n) => n.id !== id);
@@ -272,7 +310,7 @@ async function deleteNote(id) {
 }
 
 async function deleteAll() {
-    if (!confirm('Delete ALL your notes permanently? This cannot be undone.')) return;
+    if (!await confirmDialog('Delete all your notes?', 'Every note and transcript will be removed permanently. This cannot be undone.', 'Delete all')) return;
     try {
         const { deleted } = await api('/api/v1/notes', { method: 'DELETE' });
         state.notes = [];
@@ -381,8 +419,7 @@ function showResult(note) {
 
     const meta = [
         formatDate(note.created_at),
-        note.audio_duration_sec ? `${formatDuration(note.audio_duration_sec)} audio` : (note.source === 'text' ? 'from text' : ''),
-        note.timings?.total_ms ? `processed in ${(note.timings.total_ms / 1000).toFixed(1)}s` : '',
+        turnaround(note),
         note.engine ? `${note.engine === 'private' ? '🔒 Private' : '⚡ Fast'} mode` : '',
     ].filter(Boolean).join(' · ');
     $('resultMeta').textContent = meta;
@@ -403,7 +440,7 @@ function showResult(note) {
         box.checked = isChecked;
         const row = el('li', { class: `action-item${isChecked ? ' checked' : ''}` }, box);
         const chips = el('div', { class: 'chips' });
-        if (item.owner) chips.append(el('span', { class: 'chip', text: `👤 ${item.owner}` }));
+        if (item.owner) chips.append(el('span', { class: 'chip', text: `👤 ${displayOwner(item.owner)}` }));
         if (item.due) chips.append(el('span', { class: 'chip due', text: `⏰ ${item.due}` }));
         row.append(el('div', {}, el('div', { class: 'task', text: item.task }), chips.childElementCount ? chips : null));
         box.addEventListener('change', () => {
@@ -441,7 +478,7 @@ function noteAsMarkdown(note) {
     const lines = [`# ${note.title || 'Voice note'}`, '', `_${new Date(note.created_at).toLocaleString()}_`, '', '## Summary', '', note.summary || '', '', '## Action items', ''];
     if (note.action_items?.length) {
         for (const item of note.action_items) {
-            const extras = [item.owner && `owner: ${item.owner}`, item.due && `due: ${item.due}`].filter(Boolean).join(', ');
+            const extras = [item.owner && `owner: ${displayOwner(item.owner)}`, item.due && `due: ${item.due}`].filter(Boolean).join(', ');
             lines.push(`- [ ] ${item.task}${extras ? ` (${extras})` : ''}`);
         }
     } else lines.push('_None_');

@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 JOB_TIMEOUT_SECONDS = 15 * 60
 FINISHED_JOB_TTL_SECONDS = 15 * 60
-GENERIC_FAILURE = "Something went wrong while processing your note. Please try again."
+GENERIC_FAILURE = "Vaani is getting a lot of traffic right now. Please try again in a minute."
 
 # Called with the job and the stage it was in when the event fired ("done"/"failed" at the end).
 Listener = Callable[["Job", str], Awaitable[None]]

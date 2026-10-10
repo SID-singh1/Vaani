@@ -25,6 +25,34 @@ class NoteView:
     sentiment: str
     transcript: str
     engine: str | None = None
+    audio_duration_sec: float | None = None
+    total_ms: int | None = None
+
+
+SPEAKER_OWNERS = {"me", "i", "myself", "speaker", "the speaker", "self"}
+
+
+def display_owner(owner: str) -> str:
+    """The model writes "Me" for tasks the speaker takes on; to the reader that's "You"."""
+    return "You" if owner.strip().lower() in SPEAKER_OWNERS else owner
+
+
+def format_duration(seconds: float) -> str:
+    seconds = round(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, rest = divmod(seconds, 60)
+    return f"{minutes}m {rest:02d}s" if rest else f"{minutes}m"
+
+
+def turnaround_line(note: NoteView) -> str | None:
+    """'⏱ 2m 54s voice note → ready in 9s': the time Vaani saves, shown on every note."""
+    if not note.total_ms:
+        return None
+    ready = f"ready in {max(1, round(note.total_ms / 1000))}s"
+    if note.audio_duration_sec:
+        return f"⏱ {format_duration(note.audio_duration_sec)} voice note → {ready}"
+    return f"⏱ {ready}"
 
 
 def queued_text(position: int | None, eta_seconds: int | None) -> str:
@@ -37,7 +65,7 @@ def _item_line(item: dict, *, bold, italic, escape) -> str:
     line = f"• {escape(item['task'])}"
     extras = []
     if item.get("owner"):
-        extras.append(f"👤 {escape(item['owner'])}")
+        extras.append(f"👤 {escape(display_owner(item['owner']))}")
     if item.get("due"):
         extras.append(f"⏰ {escape(item['due'])}")
     if extras:
@@ -66,6 +94,9 @@ def format_note_html(note: NoteView) -> str:
         lines += [_item_line(i, bold=bold, italic=italic, escape=esc) for i in note.action_items]
     else:
         lines.append("• Nothing to do here.")
+    footer = turnaround_line(note)
+    if footer:
+        lines += ["", italic(esc(footer))]
     return "\n".join(lines)
 
 
@@ -82,6 +113,9 @@ def format_note_whatsapp(note: NoteView) -> str:
         ]
     else:
         lines.append("• Nothing to do here.")
+    footer = turnaround_line(note)
+    if footer:
+        lines += ["", f"_{footer}_"]
     return "\n".join(lines)
 
 

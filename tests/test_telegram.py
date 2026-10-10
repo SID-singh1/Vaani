@@ -243,3 +243,29 @@ def test_long_results_are_split_on_line_boundaries():
     view = NoteView(id="n", title="T", summary="S " * 3000, action_items=[], sentiment="Neutral", transcript="")
     chunks = split_text(format_note_html(view), 4000)
     assert len(chunks) > 1 and all(len(c) <= 4000 for c in chunks)
+
+
+def test_transcript_button_disappears_after_use_and_history_reopens_notes(bot):
+    me_owner = {
+        "title": "Plan",
+        "summary": "We plan the launch.",
+        "sentiment": "Neutral",
+        "action_items": [{"task": "Send the deck", "owner": "Me", "due": None}],
+    }
+    client, api, send = bot(fake_registry(llms=[FakeLLM(analysis=me_owner)]))
+    send(text_message("Yeh ek lamba message hai jisme kaafi saare words hain bhai log.", 50))
+    result = api.sent()[-1]
+    assert "👤 You" in result["text"] and "⏱ ready in" in result["text"]
+    note_id = json.dumps(result["reply_markup"]).split('"tr:')[1].split('"')[0]
+
+    payload = callback(f"tr:{note_id}")
+    payload["callback_query"]["message"]["reply_markup"] = result["reply_markup"]
+    send(payload)
+    edited = api.sent("editMessageReplyMarkup")[-1]["reply_markup"]
+    assert "tr:" not in json.dumps(edited) and "rate:up:" in json.dumps(edited)
+
+    send(command("/history", 51))
+    history = api.sent()[-1]
+    assert "We plan the launch." in history["text"] and f"open:{note_id}" in json.dumps(history["reply_markup"])
+    send(callback(f"open:{note_id}"))
+    assert "<b>📝 Plan</b>" in api.sent()[-1]["text"]
