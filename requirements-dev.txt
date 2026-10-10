@@ -1,0 +1,4 @@
+-r backend/requirements.txt
+pytest>=8
+ruff>=0.6
+jiwer>=3.0   # evaluation metrics (WER/CER)

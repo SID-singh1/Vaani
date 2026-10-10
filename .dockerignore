@@ -1,14 +1,6 @@
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-.env
-vaani.db
-ml/data/temp/*
-test.zip
-llama_cpp.tar.gz
-bash.exe.stackdump
-app.log
+# Keep the build context small: only backend/ and web/ are copied into the image.
+*
+!backend/
+!web/
+backend/**/__pycache__
+backend/**/*.pyc

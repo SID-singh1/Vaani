@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import { Bot, ShieldAlert, Zap, ArrowUpRight } from 'lucide-react';
 import './index.css';
 
 function App() {
   const telegramLink = "https://t.me/Vaani_hinglish_bot";
+  // Set VITE_APP_URL (e.g. in marketing/.env.production) to show the "Open web app" button.
+  const webAppLink = import.meta.env.VITE_APP_URL;
   
   // Custom Cursor Logic
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -83,7 +85,8 @@ function App() {
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 1, delay: 0.2 }}
           >
-            100% On-Device Hinglish Transcription. Zero Cloud APIs. Absolute Privacy.
+            Send a Hindi, English or Hinglish voice note. Get a summary, who-does-what action items
+            and a clean Hinglish transcript in seconds.
           </motion.p>
           
           <motion.div
@@ -101,6 +104,19 @@ function App() {
             >
               Try on Telegram <ArrowUpRight />
             </a>
+            {webAppLink && (
+              <a
+                href={webAppLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="cyber-button"
+                style={{ marginLeft: '1rem' }}
+                onMouseEnter={() => setIsHovering(true)}
+                onMouseLeave={() => setIsHovering(false)}
+              >
+                Open web app <ArrowUpRight />
+              </a>
+            )}
           </motion.div>
         </motion.section>
 
@@ -124,8 +140,8 @@ function App() {
             >
               <div className="feature-content">
                 <div className="feature-number">01</div>
-                <h2 className="feature-title">Blazing <br/> Fast API</h2>
-                <p className="feature-desc">Powered by Groq's LPU hardware for instant Whisper transcription and Gemini Pro for deeply intelligent context extraction.</p>
+                <h2 className="feature-title">Fast <br/> Mode</h2>
+                <p className="feature-desc">Whisper large-v3 on Groq plus Gemini, with automatic failover between models. A 3-minute voice note comes back in about 13 seconds.</p>
               </div>
               <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                 <ShieldAlert className="visual-icon pink" />
@@ -143,7 +159,7 @@ function App() {
               <div className="feature-content">
                 <div className="feature-number">02</div>
                 <h2 className="feature-title">Built for <br/> Hinglish</h2>
-                <p className="feature-desc">Standard transcribers fail at code-switching. Our custom Whisper pipeline natively understands Indian business contexts.</p>
+                <p className="feature-desc">Code-switched speech becomes a readable Romanized Hinglish transcript, and action items come out in English with the owner and the deadline.</p>
               </div>
               <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                 <Bot className="visual-icon cyan" />
@@ -160,8 +176,8 @@ function App() {
             >
               <div className="feature-content">
                 <div className="feature-number">03</div>
-                <h2 className="feature-title">Dual Engine <br/> Architecture</h2>
-                <p className="feature-desc">Supports running 100% locally with 4-bit LLaMA models for complete privacy, or dynamically switching to cloud APIs for scale.</p>
+                <h2 className="feature-title">Private <br/> Mode</h2>
+                <p className="feature-desc">Open source and self-hostable: a quantized Whisper and a local LLM run entirely on your own machine, so audio never reaches an AI company.</p>
               </div>
               <div className="feature-visual" onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                 <Zap className="visual-icon" />

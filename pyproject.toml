@@ -1,0 +1,38 @@
+[project]
+name = "vaani"
+version = "2.0.0"
+description = "Hinglish voice notes to summaries and action items, over web, Telegram and WhatsApp."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["backend", "."]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["ml/llama.cpp", "marketing", "venv", "scratch"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "SIM"]
+ignore = [
+    "S101",   # assert is fine in tests
+    "S311",   # random is not used for security
+    "B008",   # FastAPI Depends() in defaults is idiomatic
+    "S603",   # subprocess calls use fixed argument lists, never a shell
+    "S607",   # ffmpeg/ffprobe are resolved from PATH on purpose
+    "ASYNC109", # explicit timeout parameters are part of the job API
+    "ASYNC240", # Path.stat()/exists() on local temp files are microsecond calls
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vaani", "conftest"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+"scripts/*" = ["S"]
+"ml/*" = ["S", "E501", "B", "UP", "SIM", "I"]

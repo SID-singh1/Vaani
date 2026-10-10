@@ -1,0 +1,43 @@
+# Render Blueprint: one free web service running the API, web client and both bots.
+# New service: Render dashboard -> New -> Blueprint -> pick this repo.
+# Existing service: copy the env vars below into its Environment tab (see DEPLOY.md).
+services:
+  - type: web
+    name: vaani
+    runtime: docker
+    plan: free
+    region: singapore          # closest free region to India
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY        # signs web sessions; never rotate casually (it also keys WhatsApp pseudonyms)
+        generateValue: true
+      - key: DATABASE_URL      # Supabase/Neon Postgres connection string
+        sync: false
+      - key: ADMIN_SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_MODE
+        value: webhook
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: ANALYTICS_EXCLUDED_USER_IDS
+        sync: false
+      - key: UNLIMITED_USER_IDS
+        sync: false
+      # WhatsApp (optional; leave unset to disable the channel)
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false

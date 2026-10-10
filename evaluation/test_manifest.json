@@ -9,7 +9,9 @@
     "expected_actions": [
       "Resolve payment gateway bug before client demo",
       "Send update by 2 PM"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_02_team_sync_long",
@@ -25,7 +27,9 @@
       "Improve extraction prompt for dates, names, and tasks",
       "Hold off on marketing until product flow stabilizes",
       "Attend 15-minute sync tomorrow at 11 AM"
-    ]
+    ],
+    "source": "human",
+    "speaker": "project author, natural speech"
   },
   {
     "id": "test_03_urgent_bug_triage",
@@ -37,7 +41,9 @@
     "expected_actions": [
       "Amit to check logs and restart replica node",
       "Alert the team if not resolved in 15 minutes"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_04_client_pitch_feedback",
@@ -49,7 +55,9 @@
     "expected_actions": [
       "Sneha to prepare updated pricing doc with 20% annual discount",
       "Send revised proposal to client by tomorrow"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_05_database_migration_plan",
@@ -61,7 +69,9 @@
     "expected_actions": [
       "Execute database migration on Saturday midnight (2 AM to 4 AM)",
       "Send maintenance notification to users on Friday evening"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_06_frontend_ui_redesign",
@@ -74,7 +84,9 @@
       "Adjust mobile margin on action item checklist",
       "Add micro-animation on button click",
       "Open pull request by Thursday"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_07_candidate_interview_feedback",
@@ -86,7 +98,9 @@
     "expected_actions": [
       "Recommend candidate for final round",
       "HR to schedule Founder interview for Monday afternoon"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_08_marketing_launch_campaign",
@@ -99,7 +113,9 @@
       "Schedule Product Hunt launch for next Wednesday",
       "Priya to record demo video and draft LinkedIn post",
       "Target 500 active signups on launch day"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_09_casual_team_outing",
@@ -111,7 +127,9 @@
     "expected_actions": [
       "Team dinner in Indiranagar on Friday evening",
       "Vote on restaurant options by 4 PM"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_10_api_rate_limiting_design",
@@ -124,7 +142,9 @@
       "Enforce 30 requests/minute rate limit",
       "Set daily limit of 10 notes for free tier, unlimited for pro tier",
       "Nikhil to test Redis configuration by tomorrow"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_11_telegram_bot_features",
@@ -136,7 +156,9 @@
     "expected_actions": [
       "Add /history and /delete commands to Telegram bot",
       "Send immediate processing status message upon receiving voice note"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_12_legal_nda_compliance",
@@ -148,7 +170,9 @@
     "expected_actions": [
       "Update data retention policy in clause 4",
       "Siddhant to sign and email document to legal team before 5 PM today"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_13_code_review_refactoring",
@@ -160,7 +184,9 @@
     "expected_actions": [
       "Use common utility function for audio conversion",
       "Remove legacy duplicate ffmpeg commands"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_14_user_feedback_review",
@@ -172,7 +198,9 @@
     "expected_actions": [
       "Enforce Romanized Hinglish rule in prompt",
       "Priya to monitor 5 feedback entries daily on admin dashboard for next 3 days"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   },
   {
     "id": "test_15_investor_update_summary",
@@ -185,6 +213,8 @@
       "Achieved sub-2-second transcription latency using Groq",
       "Crossed 5,000 total interactions with zero downtime",
       "Draft and send monthly investor newsletter by Friday"
-    ]
+    ],
+    "source": "tts",
+    "speaker": "gTTS (hi) reading the reference text"
   }
 ]

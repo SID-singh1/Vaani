@@ -1,0 +1,46 @@
+# Self-hosted Vaani with BOTH engines, including the fully on-device private engine.
+#
+#   1. Put a GGUF model in ./models (see DEPLOY.md, e.g. models/llm.gguf).
+#   2. cp .env.example .env and fill in what you need (cloud keys are optional here).
+#   3. docker compose up --build        ->  http://localhost:8000
+#
+# Needs ~6 GB RAM. Speech-to-text model weights download into ./models on first use.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        PRIVATE: "1"
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATABASE_URL: sqlite:////data/vaani.db
+      PRIVATE_ENGINE_ENABLED: "true"
+      LLAMA_SERVER_URL: http://llm:8080
+      PRIVATE_LLM_MODEL_PATH: /models/llm.gguf
+      TELEGRAM_MODE: ${TELEGRAM_MODE:-disabled}
+    ports:
+      - "8000:8000"
+    volumes:
+      - vaani-data:/data
+      - ./models:/models
+    depends_on:
+      llm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: ["-m", "/models/llm.gguf", "-c", "8192", "--host", "0.0.0.0", "--port", "8080", "-np", "1"]
+    volumes:
+      - ./models:/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  vaani-data:
