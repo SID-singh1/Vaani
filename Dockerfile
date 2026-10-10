@@ -15,7 +15,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_ENV=production \
     PORT=8000 \
     TEMP_DIR=/tmp/vaani \
-    MODELS_DIR=/models
+    MODELS_DIR=/models \
+    DATABASE_URL=sqlite:////data/vaani.db
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
@@ -31,8 +32,8 @@ COPY web/ web/
 
 # Run as an unprivileged user.
 RUN useradd --create-home --uid 1000 vaani \
-    && mkdir -p /tmp/vaani /models \
-    && chown -R vaani /tmp/vaani /models
+    && mkdir -p /tmp/vaani /models /data \
+    && chown -R vaani /tmp/vaani /models /data
 USER vaani
 
 EXPOSE 8000
