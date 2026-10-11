@@ -53,7 +53,7 @@ class QuotaService:
         if engine == "cloud" and cloud_cap and repo.count_engine_notes_since(session, "cloud", day) >= cloud_cap:
             hint = " You can switch to Private mode in the meantime." if private_available else ""
             raise QuotaExceeded(
-                "Vaani has reached its free daily capacity for Fast mode. Please try again tomorrow." + hint
+                "Vaani is at full capacity for today because of high demand. Please try again tomorrow." + hint
             )
 
     def usage(self, session: Session, user_id: str) -> dict:

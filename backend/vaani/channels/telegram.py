@@ -83,19 +83,40 @@ def _view(note: Interaction) -> NoteView:
         sentiment=note.sentiment or "Neutral",
         transcript=note.transcript or "",
         engine=note.engine,
+        audio_duration_sec=note.audio_duration_sec,
+        total_ms=note.total_ms,
     )
 
 
 def _result_keyboard(note_id: str, rated: bool = False) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton("📄 Full transcript", callback_data=f"tr:{note_id}")]]
     if not rated:
+        # "Useful?" rather than "Accurate?": users can judge usefulness at a glance,
+        # while accuracy would mean re-listening to their own audio.
         rows.append(
             [
-                InlineKeyboardButton("👍 Accurate", callback_data=f"rate:up:{note_id}"),
-                InlineKeyboardButton("👎 Inaccurate", callback_data=f"rate:down:{note_id}"),
+                InlineKeyboardButton("👍 Useful", callback_data=f"rate:up:{note_id}"),
+                InlineKeyboardButton("👎 Not useful", callback_data=f"rate:down:{note_id}"),
             ]
         )
     return InlineKeyboardMarkup(rows)
+
+
+def _without_buttons(markup: InlineKeyboardMarkup | None, prefix: str) -> InlineKeyboardMarkup | None:
+    """The same keyboard minus buttons whose callback data starts with `prefix` (None if empty)."""
+    if markup is None:
+        return None
+    rows = [
+        [button for button in row if not (button.callback_data or "").startswith(prefix)]
+        for row in markup.inline_keyboard
+    ]
+    rows = [row for row in rows if row]
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
+def _preview(text: str, limit: int = 110) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
 def _media_extension(file_name: str | None, mime: str | None, default: str) -> str:
@@ -245,14 +266,20 @@ class TelegramChannel:
         if not notes:
             await update.message.reply_text("📭 No notes yet. Send me a voice note to get started!")
             return
-        lines = [f"📚 <b>Your last {len(notes)} note(s)</b>\n"]
+        lines = [f"📚 <b>Your last {len(notes)} note(s)</b>"]
         for i, note in enumerate(notes, 1):
             date = note.timestamp.strftime("%d %b") if note.timestamp else ""
-            title = html.escape(note.title or (note.summary or "Note")[:60])
-            lines.append(f"<b>{i}.</b> {title} <i>({date})</i>")
-        lines.append("\nTap a note's “Full transcript” button to re-read it, or use /delete to remove notes.")
-        for chunk in split_text("\n".join(lines), MESSAGE_LIMIT):
-            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+            title = html.escape(note.title or "Note")
+            actions = len(note.action_items_list())
+            meta = f"{date} · {actions} action item{'s' if actions != 1 else ''}"
+            lines.append(f"\n<b>{i}. {title}</b>\n<i>{meta}</i>\n{html.escape(_preview(note.summary or ''))}")
+        lines.append("\nTap a number to open the full note.")
+        buttons = [InlineKeyboardButton(str(i), callback_data=f"open:{note.id}") for i, note in enumerate(notes, 1)]
+        keyboard = InlineKeyboardMarkup([buttons[i : i + 5] for i in range(0, len(buttons), 5)])
+        chunks = split_text("\n".join(lines), MESSAGE_LIMIT)
+        for i, chunk in enumerate(chunks):
+            markup = keyboard if i == len(chunks) - 1 else None
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML, reply_markup=markup)
 
     async def cmd_delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         notes = await self.ctx.db.run(repo.list_notes, self._user_id(update), DELETE_LIST_SIZE)
@@ -406,7 +433,7 @@ class TelegramChannel:
             await self._send_result(message, note)
             await self._safe_delete(status)
         else:
-            text_out = f"⚠️ {job.error or 'Something went wrong. Please try again.'}"
+            text_out = f"⚠️ {job.error or 'Vaani is getting a lot of traffic right now. Please try again in a minute.'}"
             try:
                 await status.edit_text(text_out)
             except TelegramError:
@@ -439,9 +466,19 @@ class TelegramChannel:
                 await query.answer("That transcript is no longer available.", show_alert=True)
                 return
             await query.answer()
+            with contextlib.suppress(TelegramError):  # one tap, one transcript
+                await query.edit_message_reply_markup(_without_buttons(query.message.reply_markup, "tr:"))
             body = "📄 <b>Full transcript</b>\n\n" + html.escape(note.transcript)
             for chunk in split_text(body, MESSAGE_LIMIT):
                 await query.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+
+        elif action == "open":
+            note = await self.ctx.db.run(repo.get_user_note, user_id, rest)
+            if note is None or note.effective_status != NoteStatus.DONE:
+                await query.answer("That note is no longer available.", show_alert=True)
+                return
+            await query.answer()
+            await self._send_result(query.message, note)
 
         elif action == "rate":
             rating, _, note_id = rest.partition(":")
@@ -451,7 +488,7 @@ class TelegramChannel:
                 return
             await query.answer("Thanks for the feedback! 🙏")
             with contextlib.suppress(TelegramError):
-                await query.edit_message_reply_markup(_result_keyboard(note_id, rated=True))
+                await query.edit_message_reply_markup(_without_buttons(query.message.reply_markup, "rate:"))
 
         elif action == "mode":
             if not self.ctx.registry.has(rest):
@@ -482,4 +519,6 @@ class TelegramChannel:
         log.error("Telegram handler error: %s", context.error, exc_info=context.error)
         if isinstance(update, Update) and update.effective_message:
             with contextlib.suppress(TelegramError):
-                await update.effective_message.reply_text("⚠️ Something went wrong on my side. Please try again.")
+                await update.effective_message.reply_text(
+                    "⚠️ Vaani is getting a lot of traffic right now. Please try again in a minute."
+                )

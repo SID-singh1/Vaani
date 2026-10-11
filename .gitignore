@@ -59,3 +59,9 @@ backups/
 
 # Claude Code / editor-local settings
 .claude/
+*.db-shm
+*.db-wal
+
+
+# some files
+DEPLOY.md

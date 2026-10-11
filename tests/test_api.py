@@ -154,7 +154,7 @@ def test_failed_notes_do_not_use_quota(make_client):
     headers = auth_headers(client)
     failed = wait_for_note(client, headers, submit_text(client, headers).json()["id"])
     assert failed["status"] == "failed"
-    assert "busy" in failed["error"]  # user-safe message, no provider details
+    assert "traffic" in failed["error"] and "fake-llm" not in failed["error"]  # calm wording, no provider names
     assert submit_text(client, headers).status_code == 202
 
 
@@ -163,7 +163,7 @@ def test_global_cloud_capacity(make_client):
     a, b = auth_headers(client), auth_headers(client)
     wait_for_note(client, a, submit_text(client, a).json()["id"])
     res = submit_text(client, b)
-    assert res.status_code == 429 and "free daily capacity" in res.json()["error"]["message"]
+    assert res.status_code == 429 and "full capacity for today" in res.json()["error"]["message"]
 
 
 def test_unlimited_users_bypass_quotas(make_client):
@@ -236,3 +236,8 @@ def test_request_info_helps_configure_proxy_hops(client):
 
 def test_deep_health_checks_database(client):
     assert client.get("/health?deep=1").json()["database"] == "ok"
+
+
+def test_admin_reports_time_saved(client):
+    data = client.get("/api/v1/admin/analytics", headers={"x-admin-key": "admin-key"}).json()
+    assert data["time_saved"] == {"listening_minutes": 0, "waiting_minutes": 0, "median_speedup": None}

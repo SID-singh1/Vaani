@@ -88,7 +88,7 @@ def build_registry(settings: Settings, http: httpx.AsyncClient) -> EngineRegistr
         engines["cloud"] = Engine(
             name="cloud",
             label="Fast",
-            description="Groq Whisper large-v3 + Gemini (with Groq fallback). Audio is sent to these AI providers.",
+            description="Quick and accurate. Audio is processed by trusted third-party AI services, then deleted.",
             asr=GroqSpeechToText(
                 settings.groq_api_key, settings.groq_asr_model, settings.temp_dir, http, settings.groq_asr_language
             ),
@@ -126,7 +126,7 @@ def build_registry(settings: Settings, http: httpx.AsyncClient) -> EngineRegistr
             engines["private"] = Engine(
                 name="private",
                 label="Private",
-                description="Whisper and a local LLM running on this server's CPU. Nothing is sent to AI companies.",
+                description="Slower but fully private: your audio never leaves this server.",
                 asr=asr,
                 llms=[LocalLLMClient(server, http, label)],
                 transliteration="rules",

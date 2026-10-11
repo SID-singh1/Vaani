@@ -74,6 +74,7 @@ def compute_analytics(session: Session, days: int, excluded: list[str]) -> dict:
     done = [r for r in rows if r.status == NoteStatus.DONE]
     failed = [r for r in rows if r.status == NoteStatus.FAILED]
     latencies = [r.total_ms for r in done if r.total_ms]
+    speedups = [round(r.audio_duration_sec * 1000 / r.total_ms) for r in done if r.total_ms and r.audio_duration_sec]
 
     timeline_notes: Counter[str] = Counter()
     timeline_users: dict[str, set[str]] = defaultdict(set)
@@ -124,6 +125,12 @@ def compute_analytics(session: Session, days: int, excluded: list[str]) -> dict:
             "failed_in_window": len(failed),
             "failure_rate": round(100 * len(failed) / (len(done) + len(failed)), 1) if (done or failed) else None,
             "audio_minutes_in_window": round(sum(r.audio_duration_sec or 0 for r in done) / 60, 1),
+        },
+        "time_saved": {
+            # Listening time users didn't have to spend, and how much faster than real time notes were ready.
+            "listening_minutes": round(sum(r.audio_duration_sec or 0 for r in done) / 60, 1),
+            "waiting_minutes": round(sum(r.total_ms or 0 for r in done if r.audio_duration_sec) / 60000, 1),
+            "median_speedup": percentile(speedups, 50),
         },
         "latency_ms": {
             "p50": percentile(latencies, 50),
