@@ -61,3 +61,7 @@ backups/
 .claude/
 *.db-shm
 *.db-wal
+
+
+# some files
+DEPLOY.md
