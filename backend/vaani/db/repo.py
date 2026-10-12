@@ -135,14 +135,16 @@ def get_user_note(session: Session, user_id: str, note_id: str) -> Interaction |
     return note
 
 
-def list_notes(session: Session, user_id: str, limit: int = 20, *, done_only: bool = False) -> list[Interaction]:
+def list_notes(
+    session: Session, user_id: str, limit: int = 20, *, done_only: bool = False, offset: int = 0
+) -> list[Interaction]:
     query = select(Interaction).where(Interaction.user_id == user_id)
     if done_only:
         query = query.where(
             (Interaction.status == NoteStatus.DONE)
             | ((Interaction.status.is_(None)) & (Interaction.error_message.is_(None)))
         )
-    query = query.order_by(Interaction.timestamp.desc()).limit(limit)
+    query = query.order_by(Interaction.timestamp.desc()).offset(offset).limit(limit)
     return list(session.scalars(query))
 
 

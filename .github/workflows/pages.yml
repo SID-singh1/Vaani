@@ -1,0 +1,36 @@
+name: Landing page
+
+# Rebuilds the marketing site and publishes it to the gh-pages branch, which GitHub Pages serves.
+on:
+  push:
+    branches: [main]
+    paths: ["marketing/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: marketing/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: marketing/dist
+          commit_message: "deploy landing page from ${{ github.sha }}"

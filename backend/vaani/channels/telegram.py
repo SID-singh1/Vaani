@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 
 TELEGRAM_DOWNLOAD_LIMIT = 20 * 1024 * 1024  # Bot API getFile limit
 MESSAGE_LIMIT = 4000
-HISTORY_DEFAULT, HISTORY_MAX = 5, 25
+HISTORY_PAGE_SIZE = 5
 DELETE_LIST_SIZE = 15
 
 _MIME_EXT = {
@@ -255,31 +255,41 @@ class TelegramChannel:
         await self.ctx.db.run(repo.add_feedback, self._user_id(update), text)
         await update.message.reply_text("🙏 Thank you! Your feedback goes straight to the developer.")
 
-    async def cmd_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        limit = HISTORY_DEFAULT
-        if context.args:
-            arg = context.args[0].lower()
-            limit = (
-                HISTORY_MAX if arg in ("all", "max") else min(max(1, int(arg)), HISTORY_MAX) if arg.isdigit() else limit
-            )
-        notes = await self.ctx.db.run(repo.list_notes, self._user_id(update), limit, done_only=True)
+    async def _history_page(self, user_id: str, page: int) -> tuple[str, InlineKeyboardMarkup] | None:
+        """One page of history: HISTORY_PAGE_SIZE notes, numbered buttons to open them, and Older/Newer arrows."""
+        offset = page * HISTORY_PAGE_SIZE
+        # One extra row tells us whether an older page exists without a separate count query.
+        notes = await self.ctx.db.run(repo.list_notes, user_id, HISTORY_PAGE_SIZE + 1, done_only=True, offset=offset)
+        has_older, notes = len(notes) > HISTORY_PAGE_SIZE, notes[:HISTORY_PAGE_SIZE]
         if not notes:
-            await update.message.reply_text("📭 No notes yet. Send me a voice note to get started!")
-            return
-        lines = [f"📚 <b>Your last {len(notes)} note(s)</b>"]
-        for i, note in enumerate(notes, 1):
+            return None
+        first = offset + 1
+        heading = "Your recent notes" if page == 0 else f"Notes {first}–{offset + len(notes)}"
+        lines = [f"📚 <b>{heading}</b>"]
+        for i, note in enumerate(notes, first):
             date = note.timestamp.strftime("%d %b") if note.timestamp else ""
             title = html.escape(note.title or "Note")
             actions = len(note.action_items_list())
             meta = f"{date} · {actions} action item{'s' if actions != 1 else ''}"
             lines.append(f"\n<b>{i}. {title}</b>\n<i>{meta}</i>\n{html.escape(_preview(note.summary or ''))}")
         lines.append("\nTap a number to open the full note.")
-        buttons = [InlineKeyboardButton(str(i), callback_data=f"open:{note.id}") for i, note in enumerate(notes, 1)]
-        keyboard = InlineKeyboardMarkup([buttons[i : i + 5] for i in range(0, len(buttons), 5)])
-        chunks = split_text("\n".join(lines), MESSAGE_LIMIT)
-        for i, chunk in enumerate(chunks):
-            markup = keyboard if i == len(chunks) - 1 else None
-            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML, reply_markup=markup)
+        rows = [[InlineKeyboardButton(str(i), callback_data=f"open:{note.id}") for i, note in enumerate(notes, first)]]
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton("◀ Newer", callback_data=f"hist:{page - 1}"))
+        if has_older:
+            nav.append(InlineKeyboardButton("Older ▶", callback_data=f"hist:{page + 1}"))
+        if nav:
+            rows.append(nav)
+        return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+    async def cmd_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        result = await self._history_page(self._user_id(update), 0)
+        if result is None:
+            await update.message.reply_text("📭 No notes yet. Send me a voice note to get started!")
+            return
+        text, keyboard = result
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def cmd_delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         notes = await self.ctx.db.run(repo.list_notes, self._user_id(update), DELETE_LIST_SIZE)
@@ -479,6 +489,15 @@ class TelegramChannel:
                 return
             await query.answer()
             await self._send_result(query.message, note)
+
+        elif action == "hist":
+            page = max(0, int(rest)) if rest.isdigit() else 0
+            result = await self._history_page(user_id, page)
+            await query.answer()
+            if result is not None:
+                text, keyboard = result
+                with contextlib.suppress(TelegramError):  # same page tapped twice: "message is not modified"
+                    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
         elif action == "rate":
             rating, _, note_id = rest.partition(":")

@@ -269,3 +269,19 @@ def test_transcript_button_disappears_after_use_and_history_reopens_notes(bot):
     assert "We plan the launch." in history["text"] and f"open:{note_id}" in json.dumps(history["reply_markup"])
     send(callback(f"open:{note_id}"))
     assert "<b>📝 Plan</b>" in api.sent()[-1]["text"]
+
+
+def test_history_pages_five_at_a_time(bot):
+    client, api, send = bot(user_daily_note_limit=0, user_burst_limit=0)
+    for i in range(7):
+        send(text_message("Yeh ek lamba message hai jisme kaafi saare words hain bhai log.", 70 + i))
+    send(command("/history", 80))
+    first = api.sent()[-1]
+    markup = json.dumps(first["reply_markup"])
+    assert markup.count('"open:') == 5 and '"hist:1"' in markup and '"hist:0"' not in markup
+
+    send(callback("hist:1"))
+    page = api.sent("editMessageText")[-1]
+    markup = json.dumps(page["reply_markup"])
+    assert "Notes 6–7" in page["text"] and markup.count('"open:') == 2
+    assert '"hist:0"' in markup and '"hist:2"' not in markup

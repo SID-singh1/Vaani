@@ -88,7 +88,7 @@ def build_registry(settings: Settings, http: httpx.AsyncClient) -> EngineRegistr
         engines["cloud"] = Engine(
             name="cloud",
             label="Fast",
-            description="Quick and accurate. Audio is processed by trusted third-party AI services, then deleted.",
+            description="Quick and accurate.",
             asr=GroqSpeechToText(
                 settings.groq_api_key, settings.groq_asr_model, settings.temp_dir, http, settings.groq_asr_language
             ),
@@ -126,7 +126,7 @@ def build_registry(settings: Settings, http: httpx.AsyncClient) -> EngineRegistr
             engines["private"] = Engine(
                 name="private",
                 label="Private",
-                description="Slower but fully private: your audio never leaves this server.",
+                description="Slower, but private.",
                 asr=asr,
                 llms=[LocalLLMClient(server, http, label)],
                 transliteration="rules",
