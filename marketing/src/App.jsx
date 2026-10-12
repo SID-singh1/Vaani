@@ -175,7 +175,7 @@ export default function App() {
             {FEATURES.map((f, i) => (
               <motion.div key={f.n} className={`feature-row${i % 2 ? ' reverse' : ''}`}
                 initial={{ opacity: 0, y: 80 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-15%' }} transition={{ duration: 0.8, type: 'spring', bounce: 0.3 }}>
+                viewport={{ once: false, margin: '-15%' }} transition={{ duration: 0.8, type: 'spring', bounce: 0.3 }}>
                 <div className="feature-content">
                   <div className="feature-number">{f.n}</div>
                   <h2 className="feature-title">{f.title[0]}<br />{f.title[1]}</h2>
@@ -192,7 +192,7 @@ export default function App() {
           <div className="steps">
             {STEPS.map((s, i) => (
               <motion.div key={s.title} className="step" initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.15 }}>
+                whileInView={{ opacity: 1, y: 0 }} viewport={{ once: false, margin: '-10%' }} transition={{ delay: i * 0.15 }}>
                 <span className="step-n">{i + 1}</span>
                 <h3>{s.title}</h3>
                 <p>{s.text}</p>
