@@ -10,7 +10,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .models import Feedback, Interaction, NoteStatus, User, utcnow
+from .models import Event, Feedback, Interaction, NoteStatus, User, WaitlistEntry, utcnow
 
 INTERRUPTED_MESSAGE = "Processing was interrupted by a server restart. Please send the note again."
 
@@ -204,6 +204,63 @@ def count_engine_notes_since(session: Session, engine: str, since: datetime) -> 
         )
         or 0
     )
+
+
+def sum_user_audio_since(session: Session, user_id: str, since: datetime) -> float:
+    """Seconds of audio this user sent since `since` (failed notes excluded, like note counts)."""
+    return float(
+        session.scalar(
+            select(func.coalesce(func.sum(Interaction.audio_duration_sec), 0)).where(
+                Interaction.user_id == user_id,
+                Interaction.timestamp >= since,
+                _not_failed(),
+            )
+        )
+        or 0
+    )
+
+
+def sum_engine_audio_since(session: Session, engine: str, since: datetime) -> float:
+    return float(
+        session.scalar(
+            select(func.coalesce(func.sum(Interaction.audio_duration_sec), 0)).where(
+                Interaction.engine == engine,
+                Interaction.timestamp >= since,
+                _not_failed(),
+            )
+        )
+        or 0
+    )
+
+
+def add_event(
+    session: Session,
+    user_id: str | None,
+    type: str,
+    *,
+    note_id: str | None = None,
+    channel: str | None = None,
+    detail: str | None = None,
+) -> None:
+    session.add(Event(user_id=user_id, type=type, note_id=note_id, channel=channel, detail=detail))
+
+
+def join_waitlist(session: Session, user_id: str, *, channel: str, source: str, email: str | None = None) -> bool:
+    """Add the user to the Pro waitlist. Returns False if they were already on it (an email given
+    the second time is still saved)."""
+    get_or_create_user(session, user_id)
+    entry = session.get(WaitlistEntry, user_id)
+    if entry is not None:
+        if email:
+            entry.email = email
+        return False
+    session.add(WaitlistEntry(user_id=user_id, channel=channel, source=source, email=email))
+    session.add(Event(user_id=user_id, type="waitlist_join", channel=channel, detail=source))
+    return True
+
+
+def on_waitlist(session: Session, user_id: str) -> bool:
+    return session.get(WaitlistEntry, user_id) is not None
 
 
 def _not_failed():

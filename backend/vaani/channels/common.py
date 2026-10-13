@@ -13,6 +13,14 @@ STAGE_TEXT = {
 }
 MIN_TEXT_NOTE_WORDS = 6
 
+# What Pro will include. Shown by /pro (Telegram), "pro" (WhatsApp) and the web app; no payments yet.
+PRO_FEATURES = (
+    "Unlimited notes (fair use) and recordings up to 60 minutes",
+    "Search and export your notes (Notion, Calendar, email)",
+    "Personal vocabulary, so names and terms are spelled right",
+    "Priority processing",
+)
+
 
 @dataclass
 class NoteView:

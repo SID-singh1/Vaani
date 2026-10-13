@@ -53,7 +53,7 @@ def test_adopts_v1_database_and_backfills(tmp_path):
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT id, channel, status, summary FROM interactions ORDER BY id")).fetchall()
         assert rows == [("bad", "web", "failed", None), ("ok", "telegram", "done", "A summary")]
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002_jobs_and_metrics"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0003_events_and_waitlist"
 
 
 def test_v1_string_action_items_still_render():

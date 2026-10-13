@@ -64,6 +64,32 @@ function render(d) {
         stat('Rated accurate', fmt.pct(d.ratings.accuracy_pct), ratingSub),
     );
 
+    const { retention: r, engagement: e, waitlist: w, capacity_today: cap } = d;
+    const quotaSub = Object.entries(e.quota_hits).map(([k, v]) => `${k.replace('_', ' ')} ${v}`).join(' · ') || 'nobody blocked';
+    $('growthStats').replaceChildren(
+        stat('Came back within 1 day', fmt.pct(r.d1.rate), `${fmt.num(r.d1.returned)} of ${fmt.num(r.d1.cohort)} users`),
+        stat('Came back within 7 days', fmt.pct(r.d7.rate), `${fmt.num(r.d7.returned)} of ${fmt.num(r.d7.cohort)} users`),
+        stat('Notes acted on', fmt.pct(e.engaged_note_rate), 'copied, downloaded or reopened'),
+        stat('Pro waitlist', fmt.num(w.total), `${fmt.pct(w.pct_of_wau)} of weekly active · ${fmt.num(w.in_window)} in window`),
+        stat('Hit a limit', fmt.num(e.quota_blocked_users), quotaSub),
+        stat('Capacity used (24h)', fmt.pct(Math.max(cap.notes_pct ?? 0, cap.audio_pct ?? 0)),
+            `notes ${fmt.pct(cap.notes_pct)} · audio ${fmt.pct(cap.audio_pct)}`),
+    );
+
+    const events = Object.entries(e.events).sort((a, b) => b[1] - a[1]);
+    $('eventsBody').replaceChildren(...(events.length ? events.map(([type, count]) => el('tr', {},
+        el('td', { text: type.replace('_', ' ') }),
+        el('td', { text: fmt.num(count) }),
+        el('td', { text: Object.entries(e.by_channel).filter(([, c]) => c[type]).map(([ch, c]) => `${ch} ${c[type]}`).join(' · ') }),
+    )) : [el('tr', {}, el('td', { colspan: '3', text: 'No events yet.' }))]));
+
+    $('waitlistBody').replaceChildren(...(w.recent.length ? w.recent.map((x) => el('tr', {},
+        el('td', { text: fmt.when(x.created_at) }),
+        el('td', {}, el('code', { text: x.user })),
+        el('td', { text: [x.channel, x.source].filter(Boolean).join(' · ') }),
+        el('td', { text: x.email || '–' }),
+    )) : [el('tr', {}, el('td', { colspan: '4', text: 'Nobody yet.' }))]));
+
     if (window.Chart) {
         Chart.defaults.color = 'rgba(255,255,255,0.6)';
         Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';

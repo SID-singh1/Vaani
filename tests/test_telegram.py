@@ -285,3 +285,20 @@ def test_history_pages_five_at_a_time(bot):
     markup = json.dumps(page["reply_markup"])
     assert "Notes 6–7" in page["text"] and markup.count('"open:') == 2
     assert '"hist:0"' in markup and '"hist:2"' not in markup
+
+
+def test_pro_waitlist_flow(bot):
+    client, api, send = bot()
+    send(command("/pro", 90))
+    assert "Vaani Pro" in api.sent()[-1]["text"] and "pro:join" in json.dumps(api.sent()[-1]["reply_markup"])
+    send(callback("pro:join"))
+    assert "on the waitlist" in api.sent("editMessageText")[-1]["text"]
+    send(command("/pro", 91))
+    assert "already on the waitlist" in api.sent()[-1]["text"]
+
+
+def test_quota_message_points_to_pro(bot):
+    client, api, send = bot(user_daily_note_limit=1)
+    send(text_message("Yeh ek lamba message hai jisme kaafi saare words hain bhai log.", 92))
+    send(text_message("Yeh ek aur lamba message hai jisme kaafi saare words hain bhai.", 93))
+    assert "free notes for today" in api.sent()[-1]["text"] and "/pro" in api.sent()[-1]["text"]

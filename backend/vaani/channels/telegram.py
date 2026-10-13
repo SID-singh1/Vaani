@@ -31,10 +31,10 @@ from ..audio import ALLOWED_EXTENSIONS
 from ..context import AppContext
 from ..db import repo
 from ..db.models import Interaction, NoteStatus
-from ..errors import VaaniError
+from ..errors import QuotaExceeded, VaaniError
 from ..jobs import Job
 from ..security import derive_secret
-from .common import MIN_TEXT_NOTE_WORDS, STAGE_TEXT, NoteView, format_note_html, queued_text, split_text
+from .common import MIN_TEXT_NOTE_WORDS, PRO_FEATURES, STAGE_TEXT, NoteView, format_note_html, queued_text, split_text
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +70,14 @@ WELCOME = (
     "/delete – delete notes\n"
     "/mode – choose how notes are processed\n"
     "/privacy – where your audio goes\n"
+    "/pro – what's coming in Vaani Pro\n"
     "/feedback &lt;text&gt; – tell the developer what to improve"
+)
+
+PRO_TEXT = (
+    "⭐ <b>Vaani Pro</b> (coming soon)\n\n"
+    + "\n".join(f"• {feature}" for feature in PRO_FEATURES)
+    + "\n\nJoin the waitlist and you'll be the first to know when it launches."
 )
 
 
@@ -165,6 +172,7 @@ class TelegramChannel:
                     BotCommand("delete", "Delete notes"),
                     BotCommand("mode", "Choose how notes are processed"),
                     BotCommand("privacy", "Where your audio goes"),
+                    BotCommand("pro", "Vaani Pro waitlist"),
                     BotCommand("feedback", "Send feedback"),
                     BotCommand("help", "How to use Vaani"),
                 ]
@@ -190,6 +198,7 @@ class TelegramChannel:
         add(CommandHandler("mode", self.cmd_mode))
         add(CommandHandler("privacy", self.cmd_privacy))
         add(CommandHandler("feedback", self.cmd_feedback))
+        add(CommandHandler("pro", self.cmd_pro))
         media = filters.VOICE | filters.AUDIO | filters.VIDEO_NOTE | filters.VIDEO | filters.Document.ALL
         add(MessageHandler(media, self.on_media))
         add(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text))
@@ -204,6 +213,9 @@ class TelegramChannel:
     # ----- commands --------------------------------------------------------------------------
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if context.args and context.args[0] == "pro":  # t.me/<bot>?start=pro, from the landing page
+            await self._send_pro(update.message, self._user_id(update))
+            return
         markup = self._mode_keyboard() if len(self.ctx.registry.available()) > 1 else None
         await update.message.reply_text(WELCOME, parse_mode=ParseMode.HTML, reply_markup=markup)
 
@@ -244,6 +256,16 @@ class TelegramChannel:
         lines = [f"Current mode: <b>{html.escape(self.ctx.registry.get(current).label)}</b>\n"]
         lines += [f"<b>{html.escape(e.label)}</b>: {html.escape(e.description)}" for e in engines]
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, reply_markup=self._mode_keyboard())
+
+    async def cmd_pro(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._send_pro(update.message, self._user_id(update))
+
+    async def _send_pro(self, message: Message, user_id: str) -> None:
+        if await self.ctx.db.run(repo.on_waitlist, user_id):
+            await message.reply_text(PRO_TEXT + "\n\n✅ You're already on the waitlist.", parse_mode=ParseMode.HTML)
+            return
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⭐ Join the waitlist", callback_data="pro:join")]])
+        await message.reply_text(PRO_TEXT, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def cmd_feedback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = " ".join(context.args or []).strip()
@@ -426,7 +448,8 @@ class TelegramChannel:
                 listener=on_progress,
             )
         except VaaniError as exc:
-            await message.reply_text(f"⚠️ {exc.user_message}")
+            hint = "\n\nWant more? See /pro." if isinstance(exc, QuotaExceeded) and exc.personal else ""
+            await message.reply_text(f"⚠️ {exc.user_message}{hint}")
             return
 
         if job is None:  # Telegram redelivered an update we've already handled
@@ -476,6 +499,7 @@ class TelegramChannel:
                 await query.answer("That transcript is no longer available.", show_alert=True)
                 return
             await query.answer()
+            await self.ctx.db.run(repo.add_event, user_id, "transcript_open", note_id=note.id, channel="telegram")
             with contextlib.suppress(TelegramError):  # one tap, one transcript
                 await query.edit_message_reply_markup(_without_buttons(query.message.reply_markup, "tr:"))
             body = "📄 <b>Full transcript</b>\n\n" + html.escape(note.transcript)
@@ -488,6 +512,7 @@ class TelegramChannel:
                 await query.answer("That note is no longer available.", show_alert=True)
                 return
             await query.answer()
+            await self.ctx.db.run(repo.add_event, user_id, "history_open", note_id=note.id, channel="telegram")
             await self._send_result(query.message, note)
 
         elif action == "hist":
@@ -498,6 +523,14 @@ class TelegramChannel:
                 text, keyboard = result
                 with contextlib.suppress(TelegramError):  # same page tapped twice: "message is not modified"
                     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+        elif action == "pro":
+            joined = await self.ctx.db.run(repo.join_waitlist, user_id, channel="telegram", source="command")
+            await query.answer("You're on the list! 🎉" if joined else "You're already on the list.")
+            with contextlib.suppress(TelegramError):
+                await query.edit_message_text(
+                    PRO_TEXT + "\n\n✅ You're on the waitlist. Thanks!", parse_mode=ParseMode.HTML
+                )
 
         elif action == "rate":
             rating, _, note_id = rest.partition(":")

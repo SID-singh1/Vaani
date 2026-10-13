@@ -106,7 +106,7 @@ function formatDate(iso) {
 // ---------- API ----------
 
 class ApiError extends Error {
-    constructor(message, status) { super(message); this.status = status; }
+    constructor(message, status, limit = null) { super(message); this.status = status; this.limit = limit; }
 }
 
 async function createSession() {
@@ -135,7 +135,7 @@ async function api(path, { method = 'GET', json, form, retry = true } = {}) {
         return api(path, { method, json, form, retry: false });
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(data?.error?.message || BUSY_MESSAGE, res.status);
+    if (!res.ok) throw new ApiError(data?.error?.message || BUSY_MESSAGE, res.status, data?.error?.limit);
     return data;
 }
 
@@ -153,7 +153,7 @@ function uploadNote(form, onProgress) {
             try { data = JSON.parse(xhr.responseText); } catch (_) { /* non-JSON */ }
             if (xhr.status === 401) { storage(TOKEN_KEY, null); reject(new ApiError('Session expired. Please try again.', 401)); }
             else if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-            else reject(new ApiError(data?.error?.message || BUSY_MESSAGE, xhr.status));
+            else reject(new ApiError(data?.error?.message || BUSY_MESSAGE, xhr.status, data?.error?.limit));
         };
         xhr.onerror = () => reject(new ApiError(OFFLINE_MESSAGE, 0));
         xhr.send(form);
@@ -190,8 +190,10 @@ function setStep(step, details = {}) {
     $('uploadBar').classList.toggle('hidden', step !== 'upload');
 }
 
-function showError(message) {
+function showError(message, { personalLimit = false } = {}) {
     $('errorText').textContent = message;
+    // Hitting your own daily limit is the moment Pro is relevant; a full service is not.
+    $('errorProBtn').classList.toggle('hidden', !personalLimit || state.me?.on_waitlist);
     show('errorPanel');
 }
 
@@ -247,8 +249,48 @@ function renderUsage() {
     const usage = state.me?.usage;
     if (!usage || !usage.daily_limit) { $('usage').classList.add('hidden'); return; }
     $('usage').classList.remove('hidden');
-    $('usageText').textContent = `${usage.used_today} of ${usage.daily_limit} free notes today`;
-    $('usageBar').style.width = `${Math.min(100, (100 * usage.used_today) / usage.daily_limit)}%`;
+    let text = `${usage.used_today} of ${usage.daily_limit} free notes today`;
+    let pct = (100 * usage.used_today) / usage.daily_limit;
+    if (usage.daily_audio_minutes) {
+        text += ` · ${Math.round(usage.audio_minutes_today)} of ${usage.daily_audio_minutes} min`;
+        pct = Math.max(pct, (100 * usage.audio_minutes_today) / usage.daily_audio_minutes);
+    }
+    $('usageText').textContent = text;
+    $('usageBar').style.width = `${Math.min(100, pct)}%`;
+}
+
+function isPersonalLimit(err) {
+    return err.status === 429 && !!err.limit && !err.limit.startsWith('global');
+}
+
+// ---------- Engagement & Pro waitlist ----------
+
+// Fire-and-forget usage signal for the developer's dashboard. Never blocks or surfaces errors.
+function logEvent(type, noteId) {
+    api('/api/v1/events', { method: 'POST', json: { type, note_id: noteId || null } }).catch(() => {});
+}
+
+function openPro(source) {
+    state.proSource = source;
+    const joined = !!state.me?.on_waitlist;
+    $('proForm').classList.toggle('hidden', joined);
+    $('proJoin').classList.toggle('hidden', joined);
+    $('proJoined').classList.toggle('hidden', !joined);
+    closeSidebar();
+    $('proDialog').showModal();
+}
+
+async function joinPro() {
+    const email = $('proEmail').value.trim();
+    if (email && !$('proEmail').checkValidity()) return toast('That email doesn\'t look right.', true);
+    try {
+        await api('/api/v1/waitlist', { method: 'POST', json: { email: email || null, source: state.proSource || 'app' } });
+        if (state.me) state.me.on_waitlist = true;
+        $('proForm').classList.add('hidden');
+        $('proJoin').classList.add('hidden');
+        $('proJoined').classList.remove('hidden');
+        $('errorProBtn').classList.add('hidden');
+    } catch (err) { toast(err.message, true); }
 }
 
 // ---------- History ----------
@@ -339,7 +381,7 @@ async function submit(form, label) {
         renderHistory();
         await track(note.id, note);
     } catch (err) {
-        showError(err.message);
+        showError(err.message, { personalLimit: isPersonalLimit(err) });
     }
     loadMe();
 }
@@ -491,6 +533,7 @@ async function copyNote() {
     try {
         await navigator.clipboard.writeText(noteAsMarkdown(state.current));
         toast('Copied to clipboard');
+        logEvent('copy', state.current.id);
     } catch (_) { toast('Copy failed. Select the text manually.', true); }
 }
 
@@ -503,6 +546,7 @@ function downloadNote() {
     document.body.append(link);
     link.click();
     setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+    logEvent('download', note.id);
 }
 
 // ---------- Recording ----------
@@ -585,6 +629,13 @@ function wireEvents() {
     $('rateUp').addEventListener('click', () => rate('up'));
     $('rateDown').addEventListener('click', () => rate('down'));
     $('copyBtn').addEventListener('click', copyNote);
+    $('transcriptBox').addEventListener('toggle', () => {
+        if ($('transcriptBox').open && state.current) logEvent('transcript_open', state.current.id);
+    });
+    $('proBtn').addEventListener('click', () => openPro('app'));
+    $('errorProBtn').addEventListener('click', () => openPro('quota'));
+    $('proCancel').addEventListener('click', () => $('proDialog').close());
+    $('proJoin').addEventListener('click', joinPro);
     $('downloadBtn').addEventListener('click', downloadNote);
     $('deleteBtn').addEventListener('click', () => state.current && deleteNote(state.current.id));
     $('deleteAllBtn').addEventListener('click', deleteAll);
@@ -622,4 +673,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateTextCounter();
     await loadMe();
     await loadHistory();
+    if (location.hash === '#pro') openPro('landing');  // linked from the landing page
 });

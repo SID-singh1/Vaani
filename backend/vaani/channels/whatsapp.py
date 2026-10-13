@@ -26,9 +26,9 @@ from ..audio import ALLOWED_EXTENSIONS
 from ..context import AppContext
 from ..db import repo
 from ..db.models import Interaction, NoteStatus
-from ..errors import VaaniError
+from ..errors import QuotaExceeded, VaaniError
 from ..security import pseudonymize
-from .common import MIN_TEXT_NOTE_WORDS, NoteView, format_note_whatsapp, split_text
+from .common import MIN_TEXT_NOTE_WORDS, PRO_FEATURES, NoteView, format_note_whatsapp, split_text
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,13 @@ HELP = (
     "👋 *Hi, I'm Vaani!*\n\n"
     "Send me a voice note in Hindi, English or Hinglish (or forward one) and I'll reply with a summary, "
     "action items and the full transcript.\n\n"
-    "Commands: *history* (recent notes), *delete all*, *privacy*, *mode*, *help*."
+    "Commands: *history* (recent notes), *delete all*, *privacy*, *mode*, *pro*, *help*."
+)
+
+PRO_TEXT = (
+    "⭐ *Vaani Pro* (coming soon)\n\n"
+    + "\n".join(f"• {feature}" for feature in PRO_FEATURES)
+    + "\n\nJoin the waitlist and you'll be the first to know when it launches."
 )
 
 
@@ -152,7 +158,8 @@ class WhatsAppChannel:
             else:
                 await self.send_text(wa_id, "I work with voice notes and text. Send me a voice note 🎙️")
         except VaaniError as exc:
-            await self.send_text(wa_id, f"⚠️ {exc.user_message}")
+            hint = "\n\nWant more? Reply *pro*." if isinstance(exc, QuotaExceeded) and exc.personal else ""
+            await self.send_text(wa_id, f"⚠️ {exc.user_message}{hint}")
         except Exception:
             log.exception("WhatsApp message handling failed")
             await self.send_text(wa_id, "⚠️ Vaani is getting a lot of traffic right now. Please try again in a minute.")
@@ -185,6 +192,11 @@ class WhatsAppChannel:
                 "Permanently delete all your notes? This can't be undone.",
                 [("del:yes", "🗑️ Yes, delete"), ("del:no", "Cancel")],
             )
+        elif command == "pro":
+            if await self.ctx.db.run(repo.on_waitlist, user_id):
+                await self.send_text(wa_id, PRO_TEXT + "\n\n✅ You're already on the waitlist.")
+            else:
+                await self.send_buttons(wa_id, PRO_TEXT, [("pro:join", "⭐ Join waitlist")])
         elif command == "mode":
             engines = self.ctx.registry.available()
             if len(engines) < 2:
@@ -206,8 +218,13 @@ class WhatsAppChannel:
             if note is None or not note.transcript:
                 await self.send_text(wa_id, "That transcript is no longer available.")
                 return
+            await self.ctx.db.run(repo.add_event, user_id, "transcript_open", note_id=note.id, channel="whatsapp")
             for chunk in split_text("📄 *Full transcript*\n\n" + note.transcript, BODY_LIMIT):
                 await self.send_text(wa_id, chunk)
+        elif action == "pro":
+            joined = await self.ctx.db.run(repo.join_waitlist, user_id, channel="whatsapp", source="command")
+            reply = "🎉 You're on the Pro waitlist. Thanks!" if joined else "✅ You're already on the list."
+            await self.send_text(wa_id, reply)
         elif action == "rate":
             rating, _, note_id = rest.partition(":")
             value = "thumbs_up" if rating == "up" else "thumbs_down"

@@ -105,3 +105,30 @@ class Feedback(Base):
     message = Column(Text, nullable=False)
 
     user = relationship("User", back_populates="feedbacks")
+
+
+class Event(Base):
+    """One engagement or usage signal (a copy, a download, a quota hit...). Content-free by design:
+    it records that something happened, never what a note said."""
+
+    __tablename__ = "events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, nullable=True)
+    note_id = Column(String, nullable=True)  # no foreign key: events outlive deleted notes
+    type = Column(String, nullable=False)
+    channel = Column(String, nullable=True)
+    detail = Column(String, nullable=True)  # e.g. which limit a quota_hit was
+    timestamp = Column(DateTime, default=utcnow)
+
+    __table_args__ = (Index("ix_events_type_ts", "type", "timestamp"),)
+
+
+class WaitlistEntry(Base):
+    __tablename__ = "waitlist"
+
+    user_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    email = Column(String, nullable=True)
+    channel = Column(String, nullable=True)
+    source = Column(String, nullable=True)  # where they joined from: app, quota, landing, command
+    timestamp = Column(DateTime, default=utcnow)

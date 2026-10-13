@@ -46,6 +46,7 @@
                 <a href="https://github.com/SID-singh1/Vaani" target="_blank" rel="noopener">GitHub</a>
                 <button class="link-btn" id="feedbackBtn">Feedback</button>
             </div>
+            <button class="btn btn-ghost pro-btn" id="proBtn"><i class="fa-solid fa-star"></i> Vaani Pro</button>
         </div>
     </aside>
 
@@ -116,7 +117,10 @@
             <section class="panel error-panel hidden" id="errorPanel" role="alert">
                 <h3>That didn't work</h3>
                 <p id="errorText"></p>
-                <div class="toolbar"><button class="btn" id="errorRetryBtn"><i class="fa-solid fa-rotate-left"></i> Try another note</button></div>
+                <div class="toolbar">
+                    <button class="btn" id="errorRetryBtn"><i class="fa-solid fa-rotate-left"></i> Try another note</button>
+                    <button class="btn btn-primary hidden" id="errorProBtn"><i class="fa-solid fa-star"></i> Join the Pro waitlist</button>
+                </div>
             </section>
 
             <!-- Result -->
@@ -179,6 +183,26 @@
     <div class="dialog-actions">
         <button class="btn btn-ghost" id="feedbackCancel">Cancel</button>
         <button class="btn btn-primary" id="feedbackSend">Send</button>
+    </div>
+</dialog>
+
+<dialog id="proDialog">
+    <h3>⭐ Vaani Pro <span class="soon">coming soon</span></h3>
+    <ul class="pro-features">
+        <li>Unlimited notes (fair use) and recordings up to 60 minutes</li>
+        <li>Search and export your notes (Notion, Calendar, email)</li>
+        <li>Personal vocabulary, so names and terms are spelled right</li>
+        <li>Priority processing</li>
+    </ul>
+    <div id="proForm">
+        <p>Join the waitlist to hear first when it launches. Email is optional.</p>
+        <label class="sr-only" for="proEmail">Email (optional)</label>
+        <input type="email" id="proEmail" maxlength="254" placeholder="you@example.com (optional)" autocomplete="email">
+    </div>
+    <p class="hidden" id="proJoined">✅ You're on the waitlist. Thanks!</p>
+    <div class="dialog-actions">
+        <button class="btn btn-ghost" id="proCancel">Close</button>
+        <button class="btn btn-primary" id="proJoin">Join the waitlist</button>
     </div>
 </dialog>
 

@@ -114,6 +114,7 @@ async def get_me(user_id: str = Depends(current_user), ctx: AppContext = Depends
         "engine": ctx.registry.resolve(preference).name if ctx.registry.available() else None,
         "engine_preference": preference,
         "usage": await ctx.db.run(ctx.quotas.usage, user_id),
+        "on_waitlist": await ctx.db.run(repo.on_waitlist, user_id),
         "engines": [_engine_payload(e) for e in ctx.registry.available()],
     }
 
@@ -236,3 +237,33 @@ async def send_feedback(
 ):
     await ctx.db.run(repo.add_feedback, user_id, body.message.strip())
     return {"ok": True}
+
+
+# Engagement signals the client reports. Everything else (quota hits, waitlist joins, ratings)
+# is recorded on the server.
+ClientEvent = Literal["copy", "download", "share", "transcript_open"]
+
+
+class EventRequest(BaseModel):
+    type: ClientEvent
+    note_id: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/events")
+async def record_event(body: EventRequest, user_id: str = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    await ctx.db.run(repo.add_event, user_id, body.type, note_id=body.note_id, channel="web")
+    return {"ok": True}
+
+
+class WaitlistRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    source: Literal["app", "quota", "landing"] = "app"
+
+
+@router.post("/waitlist")
+async def join_waitlist(
+    body: WaitlistRequest, user_id: str = Depends(current_user), ctx: AppContext = Depends(get_ctx)
+):
+    email = body.email.strip().lower() if body.email else None
+    joined = await ctx.db.run(repo.join_waitlist, user_id, channel="web", source=body.source, email=email)
+    return {"ok": True, "already_joined": not joined}

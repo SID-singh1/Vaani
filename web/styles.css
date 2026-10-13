@@ -304,6 +304,10 @@ dialog textarea, dialog input {
 }
 dialog textarea { min-height: 110px; resize: vertical; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.pro-btn { width: 100%; margin-top: 0.75rem; justify-content: center; }
+.pro-features { margin: 0 0 1rem 1.1rem; color: var(--text); font-size: 0.92rem; line-height: 1.7; }
+.soon { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; vertical-align: middle; margin-left: 6px; }
 
 /* ---------- Document pages (privacy) ---------- */
 

@@ -55,6 +55,15 @@ class QuotaExceeded(VaaniError):
     status_code = 429
     code = "quota_exceeded"
 
+    def __init__(self, user_message: str | None = None, *, limit: str = "", detail: str | None = None):
+        super().__init__(user_message, detail=detail)
+        self.limit = limit  # burst / daily_notes / daily_audio / global_notes / global_audio
+
+    @property
+    def personal(self) -> bool:
+        """True when this user hit their own limit (Pro would help), not the service's capacity."""
+        return not self.limit.startswith("global")
+
 
 class EngineUnavailable(VaaniError):
     status_code = 503

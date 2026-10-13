@@ -28,7 +28,7 @@ from .context import AppContext
 from .db.migrate import run_migrations
 from .db.session import Database
 from .engines.registry import EngineRegistry, build_registry
-from .errors import VaaniError
+from .errors import QuotaExceeded, VaaniError
 from .jobs import JobManager
 from .pipeline import NotePipeline
 from .quotas import QuotaService
@@ -108,6 +108,26 @@ class _BodyTooLarge(Exception):
     pass
 
 
+def admin_alerter(settings: Settings, http: httpx.AsyncClient):
+    """A function that messages the developer on Telegram, or None if ADMIN_TELEGRAM_CHAT_ID isn't set."""
+    if not (settings.telegram_bot_token and settings.admin_telegram_chat_id):
+        return None
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+
+    async def send(text: str) -> None:
+        try:
+            response = await http.post(url, json={"chat_id": settings.admin_telegram_chat_id, "text": text})
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            # Never log the exception text: the request URL contains the bot token.
+            status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else type(exc).__name__
+            log.warning("Admin alert failed (%s)", status)
+        else:
+            log.info("Admin alert sent")
+
+    return send
+
+
 def create_app(settings: Settings | None = None, registry_factory: RegistryFactory | None = None) -> FastAPI:
     settings = settings or load_settings()
     setup_logging(settings.log_level)
@@ -128,7 +148,7 @@ def create_app(settings: Settings | None = None, registry_factory: RegistryFacto
             registry=registry,
             jobs=jobs,
             quotas=quotas,
-            notes=NoteService(db, registry, jobs, quotas),
+            notes=NoteService(db, registry, jobs, quotas, alert=admin_alerter(settings, http)),
         )
         app.state.ctx = ctx
         await jobs.start()
@@ -170,7 +190,10 @@ def create_app(settings: Settings | None = None, registry_factory: RegistryFacto
 
     @app.exception_handler(VaaniError)
     async def vaani_error(_: Request, exc: VaaniError):
-        return JSONResponse({"error": {"code": exc.code, "message": exc.user_message}}, status_code=exc.status_code)
+        error = {"code": exc.code, "message": exc.user_message}
+        if isinstance(exc, QuotaExceeded):
+            error["limit"] = exc.limit  # lets the web app offer the Pro waitlist for personal limits
+        return JSONResponse({"error": error}, status_code=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, exc: RequestValidationError):

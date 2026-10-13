@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
 
 from .db import repo
-from .db.models import Interaction
+from .db.models import Interaction, utcnow
 from .db.session import Database
 from .engines.registry import EngineRegistry
-from .errors import BadRequest
+from .errors import BadRequest, QuotaExceeded
 from .jobs import Job, JobManager, Listener
 from .pipeline import NoteRequest
 from .quotas import QuotaService
@@ -22,11 +24,20 @@ MAX_TEXT_CHARS = 20_000
 
 
 class NoteService:
-    def __init__(self, db: Database, registry: EngineRegistry, jobs: JobManager, quotas: QuotaService):
+    def __init__(
+        self,
+        db: Database,
+        registry: EngineRegistry,
+        jobs: JobManager,
+        quotas: QuotaService,
+        alert: Callable[[str], Awaitable[None]] | None = None,
+    ):
         self.db = db
         self.registry = registry
         self.jobs = jobs
         self.quotas = quotas
+        self.alert = alert  # sends a message to the developer (e.g. on Telegram)
+        self._alerted_on: date | None = None
 
     async def resolve_engine(self, user_id: str, requested: str | None = None) -> str:
         if requested:
@@ -65,7 +76,15 @@ class NoteService:
                     return None, existing
 
             engine_name = await self.resolve_engine(user_id, engine)
-            await self.db.run(self.quotas.check, user_id, engine_name, private_available=self.registry.has("private"))
+            try:
+                await self.db.run(
+                    self.quotas.check, user_id, engine_name, private_available=self.registry.has("private")
+                )
+            except QuotaExceeded as exc:
+                await self.db.run(repo.add_event, user_id, "quota_hit", channel=channel, detail=exc.limit)
+                raise
+            if engine_name == "cloud":
+                await self._maybe_alert_capacity()
             source = "audio" if audio_path is not None else "text"
             try:
                 note = await self.db.run(
@@ -95,6 +114,21 @@ class NoteService:
         except BaseException:
             self._discard(audio_path)
             raise
+
+    async def _maybe_alert_capacity(self) -> None:
+        """Tell the developer, at most once a day, when the shared free-tier capacity is filling up."""
+        threshold = self.quotas.settings.capacity_alert_percent
+        today = utcnow().date()
+        if self.alert is None or not threshold or self._alerted_on == today:
+            return
+        notes_pct, audio_pct = await self.db.run(self.quotas.cloud_usage)
+        if max(notes_pct, audio_pct) < threshold:
+            return
+        self._alerted_on = today
+        await self.alert(
+            f"⚠️ Vaani is at {notes_pct:.0f}% of today's note cap and {audio_pct:.0f}% of the audio-minute cap "
+            "(last 24h). New notes are refused at 100%."
+        )
 
     @staticmethod
     def _discard(audio_path: Path | None) -> None:

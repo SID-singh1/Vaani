@@ -144,7 +144,8 @@ def test_daily_quota(make_client):
     blocked = submit_text(client, headers)
     assert blocked.status_code == 429
     assert "2 free notes for today" in blocked.json()["error"]["message"]
-    assert client.get("/api/v1/me", headers=headers).json()["usage"] == {"used_today": 2, "daily_limit": 2}
+    usage = client.get("/api/v1/me", headers=headers).json()["usage"]
+    assert usage["used_today"] == 2 and usage["daily_limit"] == 2 and usage["tier"] == "free"
 
 
 def test_failed_notes_do_not_use_quota(make_client):
@@ -241,3 +242,87 @@ def test_deep_health_checks_database(client):
 def test_admin_reports_time_saved(client):
     data = client.get("/api/v1/admin/analytics", headers={"x-admin-key": "admin-key"}).json()
     assert data["time_saved"] == {"listening_minutes": 0, "waiting_minutes": 0, "median_speedup": None}
+
+
+def _user_id(client, headers) -> str:
+    return client.get("/api/v1/me", headers=headers).json()["user_id"]
+
+
+def test_daily_audio_quota_and_quota_hit_event(make_client):
+    from vaani.db import repo
+    from vaani.db.models import Event, Interaction
+
+    client = make_client(user_daily_audio_minutes=5)
+    headers = auth_headers(client)
+    db = client.app.state.ctx.db
+    user_id = _user_id(client, headers)
+    with db.session() as session:
+        repo.get_or_create_user(session, user_id)
+        session.add(Interaction(user_id=user_id, status="done", audio_duration_sec=301))
+    blocked = submit_text(client, headers)
+    assert blocked.status_code == 429
+    assert "5 free minutes of audio" in blocked.json()["error"]["message"]
+    with db.session() as session:
+        assert [(e.type, e.detail, e.channel) for e in session.query(Event)] == [("quota_hit", "daily_audio", "web")]
+
+
+def test_pro_users_skip_personal_limits(make_client):
+    from vaani.db.models import User
+
+    client = make_client(user_daily_note_limit=1)
+    headers = auth_headers(client)
+    wait_for_note(client, headers, submit_text(client, headers).json()["id"])
+    with client.app.state.ctx.db.session() as session:
+        session.merge(User(id=_user_id(client, headers), tier="pro"))
+    assert submit_text(client, headers).status_code == 202
+    assert client.get("/api/v1/me", headers=headers).json()["usage"]["daily_limit"] is None
+
+
+def test_global_audio_cap_applies_to_everyone(make_client):
+    from vaani.db import repo
+    from vaani.db.models import Interaction
+
+    client = make_client(global_daily_audio_minutes=1)
+    headers = auth_headers(client)
+    with client.app.state.ctx.db.session() as session:
+        repo.get_or_create_user(session, "tg_1")
+        session.add(Interaction(user_id="tg_1", engine="cloud", status="done", audio_duration_sec=61))
+    blocked = submit_text(client, headers)
+    assert blocked.status_code == 429 and "full capacity" in blocked.json()["error"]["message"]
+
+
+def test_capacity_alert_sent_once_a_day(make_client):
+    client = make_client(global_daily_cloud_limit=2, capacity_alert_percent=50)
+    sent = []
+
+    async def alert(text):
+        sent.append(text)
+
+    client.app.state.ctx.notes.alert = alert
+    headers = auth_headers(client)
+    wait_for_note(client, headers, submit_text(client, headers).json()["id"])  # 0% before this note
+    assert sent == []
+    submit_text(client, headers)  # 50% now
+    assert len(sent) == 1 and "50% of today's note cap" in sent[0]
+
+
+def test_events_and_waitlist(client):
+    headers = auth_headers(client)
+    assert client.post("/api/v1/events", json={"type": "copy", "note_id": "n1"}, headers=headers).json() == {"ok": True}
+    assert client.post("/api/v1/events", json={"type": "quota_hit"}, headers=headers).status_code == 400
+    assert client.post("/api/v1/events", json={"type": "copy"}).status_code == 401
+
+    assert client.get("/api/v1/me", headers=headers).json()["on_waitlist"] is False
+    bad = client.post("/api/v1/waitlist", json={"email": "not-an-email"}, headers=headers)
+    assert bad.status_code == 400
+    first = client.post("/api/v1/waitlist", json={"source": "quota"}, headers=headers).json()
+    again = client.post("/api/v1/waitlist", json={"email": "A@Example.com"}, headers=headers).json()
+    assert first["already_joined"] is False and again["already_joined"] is True
+    assert client.get("/api/v1/me", headers=headers).json()["on_waitlist"] is True
+
+    data = client.get("/api/v1/admin/analytics", headers={"x-admin-key": "admin-key"}).json()
+    assert data["engagement"]["events"] == {"copy": 1, "waitlist_join": 1}
+    assert data["waitlist"]["total"] == 1
+    assert data["waitlist"]["recent"][0]["email"] == "a@example.com"
+    assert data["waitlist"]["by_source"] == {"quota": 1}
+    assert set(data["retention"]) == {"d1", "d7"} and "notes_pct" in data["capacity_today"]

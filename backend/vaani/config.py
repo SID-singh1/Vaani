@@ -80,10 +80,16 @@ class Settings:
 
     # Limits that protect the free API tiers
     max_upload_mb: int = 20
-    user_daily_note_limit: int = 20
+    # Per free user, rolling 24h. Pro users (users.tier = "pro") skip the per-user limits.
+    user_daily_note_limit: int = 10
+    user_daily_audio_minutes: int = 20
     user_burst_limit: int = 5
     user_burst_window_minutes: int = 10
+    # Everyone combined, rolling 24h. Groq's free Whisper allows 28,800 audio seconds (480 min) a day.
     global_daily_cloud_limit: int = 300
+    global_daily_audio_minutes: int = 400
+    capacity_alert_percent: int = 80  # message the admin on Telegram once a day past this share
+    admin_telegram_chat_id: str = ""
     unlimited_user_ids: list[str] = field(default_factory=list)
     ip_rate_limit: str = "30/minute"
     session_rate_limit: str = "60/minute"
@@ -189,10 +195,14 @@ def load_settings() -> Settings:
         max_audio_seconds_private=_int("MAX_AUDIO_SECONDS_PRIVATE", 10 * 60),
         default_engine=_str("DEFAULT_ENGINE", "cloud").lower(),
         max_upload_mb=_int("MAX_UPLOAD_MB", 20),
-        user_daily_note_limit=_int("USER_DAILY_NOTE_LIMIT", 20),
+        user_daily_note_limit=_int("USER_DAILY_NOTE_LIMIT", 10),
+        user_daily_audio_minutes=_int("USER_DAILY_AUDIO_MINUTES", 20),
         user_burst_limit=_int("USER_BURST_LIMIT", 5),
         user_burst_window_minutes=_int("USER_BURST_WINDOW_MINUTES", 10),
         global_daily_cloud_limit=_int("GLOBAL_DAILY_CLOUD_LIMIT", 300),
+        global_daily_audio_minutes=_int("GLOBAL_DAILY_AUDIO_MINUTES", 400),
+        capacity_alert_percent=_int("CAPACITY_ALERT_PERCENT", 80),
+        admin_telegram_chat_id=_str("ADMIN_TELEGRAM_CHAT_ID"),
         unlimited_user_ids=_list("UNLIMITED_USER_IDS"),
         ip_rate_limit=_str("IP_RATE_LIMIT", "30/minute"),
         session_rate_limit=_str("SESSION_RATE_LIMIT", "60/minute"),

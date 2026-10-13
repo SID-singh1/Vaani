@@ -38,6 +38,8 @@
         .feedback-item { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
         .feedback-item small { color: var(--faint); display: block; }
         .filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .section-title { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 0.5rem 0 0.6rem; }
+        .split + .split { margin-top: 12px; }
         code { background: rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 5px; }
     </style>
 </head>
@@ -58,6 +60,8 @@
     </header>
 
     <section class="stats" id="stats"></section>
+    <h2 class="section-title">Growth signals</h2>
+    <section class="stats" id="growthStats"></section>
 
     <section class="charts">
         <div class="panel chart-card"><h3>Notes & active users per day</h3><div class="chart-box"><canvas id="timelineChart"></canvas></div></div>
@@ -77,6 +81,27 @@
         <div class="panel chart-card">
             <h3>User feedback</h3>
             <div id="feedbackList"></div>
+        </div>
+    </section>
+
+    <section class="split">
+        <div class="panel chart-card">
+            <h3>Engagement events (window)</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Event</th><th>Count</th><th>By channel</th></tr></thead>
+                    <tbody id="eventsBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="panel chart-card">
+            <h3>Pro waitlist</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>When</th><th>User</th><th>From</th><th>Email</th></tr></thead>
+                    <tbody id="waitlistBody"></tbody>
+                </table>
+            </div>
         </div>
     </section>
 </div>
